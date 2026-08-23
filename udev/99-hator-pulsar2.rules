@@ -1,1 +1,5 @@
+# Raw USB access (for tools using libusb on the receiver)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002f", MODE="0666", GROUP="plugdev"
+
+# hidraw nodes for the same receiver (feature-report access used by this tool)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002f", MODE="0666", GROUP="plugdev"

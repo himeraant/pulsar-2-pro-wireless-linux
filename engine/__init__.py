@@ -45,9 +45,10 @@ class HatorEngine:
 
     def read_battery(self) -> dict | None:
         # Tier 1: sysfs node; Tier 2: device feature report.
+        dev = None
         try:
             dev = self._get_device()
-        except DeviceNotFoundError:
+        except Exception:
             dev = None
         info = read_battery(dev)
         if info is None:
