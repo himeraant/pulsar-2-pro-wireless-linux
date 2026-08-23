@@ -1,113 +1,88 @@
-"""USB device access for the HATOR Pulsar 2 Pro (wireless) via hidraw.
+"""USB device access for the HATOR Pulsar 2 Pro (wireless) via pyusb.
 
 The wireless Pulsar 2 Pro uses a SINOWEALTH 2.4G receiver (VID 0x258a, PID
-0x002f). Configuration and battery use HID feature reports (report IDs 0x05 and
-0x08) sent over the receiver's hidraw node via the HIDIOCSFEATURE / HIDIOCGFEATURE
-ioctls. This works alongside usbhid (the mouse keeps working) without detaching
-any kernel driver. Requires a udev rule granting the hidraw nodes access (see
-udev/99-hator-pulsar2.rules).
+0x002f). Configuration and battery use vendor HID reports (report IDs 0x05 and
+0x08) on USB interface 1, accessed as HID control transfers:
+
+  SET_REPORT (OUT): bmRequestType=0x21, bRequest=0x09, wValue=0x0300|report_id,
+                    wIndex=0x0001, data = [report_id, payload...]
+  GET_REPORT (IN) : bmRequestType=0xA1, bRequest=0x01, wValue=0x0300|report_id,
+                    wIndex=0x0001, wLength = report size
+
+Interface 1 must be claimed (usbhid detached) to send these control transfers.
+The mouse pointer lives on interface 0, so it keeps working; interface 1
+(keyboard/vendor) is claimed for the duration and released + re-bound on close.
 """
 from __future__ import annotations
 
-import fcntl
-import glob
-import os
+import usb.core
+import usb.util
 
 SINOWEALTH_VID = 0x258A
 SINOWEALTH_PID = 0x002F
 
-# ioctl encoding (Linux asm-generic/ioctl.h)
-_IOC_NRBITS, _IOC_TYPEBITS, _IOC_SIZEBITS, _IOC_DIRBITS = 8, 8, 14, 2
-_IOC_NRSHIFT, _IOC_TYPESHIFT, _IOC_SIZESHIFT, _IOC_DIRSHIFT = 0, 8, 16, 30
-_IOC_WRITE, _IOC_READ = 1, 2
-
-
-def _ioc(direction, type_, nr, size):
-    return (direction << _IOC_DIRSHIFT) | (size << _IOC_SIZESHIFT) | (
-        ord(type_) << _IOC_TYPESHIFT) | nr
-
-
-def _sfeat(size):
-    return _ioc(_IOC_WRITE, "H", 0x06, size)   # HIDIOCSFEATURE
-
-
-def _gfeat(size):
-    return _ioc(_IOC_WRITE | _IOC_READ, "H", 0x07, size)  # HIDIOCGFEATURE
+SET_REPORT = 0x09
+GET_REPORT = 0x01
+HID_FEATURE = 0x0300  # report type 3 (feature) in the high byte of wValue
+INTERFACE = 1         # wIndex: the vendor/config interface
 
 
 class DeviceNotFoundError(Exception):
     pass
 
 
-class PermissionError2(Exception):
-    pass
-
-
-def _receiver_hidraw_nodes(vid=SINOWEALTH_VID, pid=SINOWEALTH_PID):
-    target = f"{vid:04x}:{pid:04x}".lower()
-    nodes = []
-    for node in glob.glob("/sys/class/hidraw/hidraw*"):
-        try:
-            real = os.path.realpath(node)
-        except OSError:
-            continue
-        if target in real.lower():
-            nodes.append((real, "/dev/" + os.path.basename(node)))
-    return nodes
-
-
-def find_hidraw(vid=SINOWEALTH_VID, pid=SINOWEALTH_PID) -> str | None:
-    """Return the receiver's config hidraw node (interface 1 preferred)."""
-    nodes = _receiver_hidraw_nodes(vid, pid)
-    if not nodes:
-        return None
-    # Prefer the node whose path references the second interface (3-2:1.1),
-    # which carried the config/battery feature reports (wIndex=0x0001).
-    for real, dev in nodes:
-        if ":1.1" in real:
-            return dev
-    return nodes[0][1]
-
-
 class HatorDevice:
-    def __init__(self, path: str | None = None, _fd=None):
-        if _fd is not None:  # tests
-            self._fd = _fd
-            return
-        self.path = path or find_hidraw()
-        if self.path is None:
+    def __init__(self, dev=None, _auto_claim=True):
+        self.dev = dev if dev is not None else usb.core.find(
+            idVendor=SINOWEALTH_VID, idProduct=SINOWEALTH_PID
+        )
+        if self.dev is None:
             raise DeviceNotFoundError(
                 f"HATOR Pulsar 2 Pro receiver not found (expect "
                 f"{SINOWEALTH_VID:04x}:{SINOWEALTH_PID:04x} SINOWEALTH). "
                 "Is the receiver plugged in? Check `lsusb | grep 258a`."
             )
+        self._detached = False
+        self._claimed = False
+        if _auto_claim:
+            self._claim()
+
+    def _claim(self):
+        """Detach usbhid from interface 1 and claim it for control transfers."""
         try:
-            self._fd = os.open(self.path, os.O_RDWR)
-        except PermissionError as e:
-            raise PermissionError2(
-                f"Cannot open {self.path} (need the udev rule for hidraw; see "
-                "udev/99-hator-pulsar2.rules, then `sudo udevadm control "
-                "--reload-rules && sudo udevadm trigger`)."
-            ) from e
+            if self.dev.is_kernel_driver_active(INTERFACE):
+                self.dev.detach_kernel_driver(INTERFACE)
+                self._detached = True
+        except usb.core.USBError:
+            pass
+        usb.util.claim_interface(self.dev, INTERFACE)
+        self._claimed = True
 
     def feature_out(self, report_id: int, data: bytes) -> None:
-        """Send a feature report: data is the payload WITHOUT the report id."""
         buf = bytes([report_id]) + data
-        fcntl.ioctl(self._fd, _sfeat(len(buf)), buf)
+        self.dev.ctrl_transfer(
+            0x21, SET_REPORT, HID_FEATURE | report_id, INTERFACE, buf
+        )
 
     def feature_in(self, report_id: int, size: int) -> bytes:
-        """Read a feature report; returns report_id + size-1 data bytes."""
-        buf = bytearray(size)
-        buf[0] = report_id
-        # Pass the mutable bytearray so the kernel writes the response back.
-        fcntl.ioctl(self._fd, _gfeat(size), buf)
-        return bytes(buf)
+        resp = self.dev.ctrl_transfer(
+            0xA1, GET_REPORT, HID_FEATURE | report_id, INTERFACE, size
+        )
+        return bytes(resp)
 
     def close(self) -> None:
         try:
-            os.close(self._fd)
-        except OSError:
+            if self._claimed:
+                usb.util.release_interface(self.dev, INTERFACE)
+        except Exception:
             pass
+        try:
+            if self._detached:
+                self.dev.attach_kernel_driver(INTERFACE)
+        except Exception:
+            pass
+        self._claimed = False
+        self._detached = False
 
     def __enter__(self):
         return self

@@ -1,68 +1,73 @@
 import pytest
-from engine.device import (
-    HatorDevice,
-    DeviceNotFoundError,
-    PermissionError2,
-    find_hidraw,
-    _sfeat,
-    _gfeat,
-    _receiver_hidraw_nodes,
-)
+import usb.core
+import usb.util
+from engine.device import HatorDevice, DeviceNotFoundError
 
 
-def test_feature_out_sends_set_report(monkeypatch):
-    calls = []
-    monkeypatch.setattr(
-        "engine.device.fcntl.ioctl",
-        lambda fd, req, buf: calls.append((req, bytes(buf))),
-    )
-    dev = HatorDevice(_fd=object())
+class FakeUSB:
+    def __init__(self, driver_active=True):
+        self.ctrl_calls = []
+        self.in_results = {}
+        self.detached = False
+        self.driver_active = driver_active
+
+    def is_kernel_driver_active(self, i):
+        return self.driver_active and not self.detached
+
+    def detach_kernel_driver(self, i):
+        self.detached = True
+
+    def attach_kernel_driver(self, i):
+        self.detached = False
+
+    def ctrl_transfer(self, bm, b, v, idx, data):
+        if isinstance(data, int):  # GET_REPORT read length
+            resp = self.in_results.get(v, bytes(data))
+            self.ctrl_calls.append((bm, b, v, idx, data, resp))
+            return bytes(resp)
+        self.ctrl_calls.append((bm, b, v, idx, bytes(data), None))
+        return None
+
+
+def make_dev(monkeypatch, fake=None):
+    monkeypatch.setattr(usb.util, "claim_interface", lambda d, i: None)
+    monkeypatch.setattr(usb.util, "release_interface", lambda d, i: None)
+    return HatorDevice(dev=fake or FakeUSB())
+
+
+def test_claims_and_detaches_interface1(monkeypatch):
+    fake = FakeUSB()
+    make_dev(monkeypatch, fake)
+    assert fake.detached is True  # usbhid detached from interface 1
+
+
+def test_reattaches_on_close(monkeypatch):
+    fake = FakeUSB()
+    dev = make_dev(monkeypatch, fake)
+    dev.close()
+    assert fake.detached is False
+
+
+def test_feature_out_encodes_set_report(monkeypatch):
+    fake = FakeUSB()
+    dev = make_dev(monkeypatch, fake)
     dev.feature_out(0x05, bytes.fromhex("90 00 00 00 00 00 00"))
-    req, buf = calls[-1]
-    assert req == _sfeat(8)
-    assert buf == bytes.fromhex("05 90 00 00 00 00 00 00")
+    bm, b, v, idx, data, _ = fake.ctrl_calls[-1]
+    assert (bm, b, v, idx) == (0x21, 0x09, 0x0305, 0x0001)
+    assert data == bytes.fromhex("05 90 00 00 00 00 00 00")
 
 
-def test_feature_in_reads_get_report(monkeypatch):
-    def fake_ioctl(fd, req, buf):
-        # kernel writes the response into the passed mutable buffer
-        buf[:] = bytes.fromhex("05 90 11 35 00 00 00 00")
-
-    monkeypatch.setattr("engine.device.fcntl.ioctl", fake_ioctl)
-    dev = HatorDevice(_fd=object())
+def test_feature_in_encodes_get_report(monkeypatch):
+    fake = FakeUSB()
+    fake.in_results[0x0305] = bytes.fromhex("05 90 11 35 00 00 00 00")
+    dev = make_dev(monkeypatch, fake)
     resp = dev.feature_in(0x05, 8)
+    bm, b, v, idx, length, _ = fake.ctrl_calls[-1]
+    assert (bm, b, v, idx, length) == (0xA1, 0x01, 0x0305, 0x0001, 8)
     assert resp == bytes.fromhex("05 90 11 35 00 00 00 00")
 
 
-def test_feature_in_uses_expected_request(monkeypatch):
-    seen = {}
-    def fake_ioctl(fd, req, buf):
-        seen["req"] = req
-        buf[:] = bytes.fromhex("05 90 11 35 00 00 00 00")
-    monkeypatch.setattr("engine.device.fcntl.ioctl", fake_ioctl)
-    HatorDevice(_fd=object()).feature_in(0x05, 8)
-    assert seen["req"] == _gfeat(8)
-
-
-def test_find_hidraw_prefers_interface1(monkeypatch):
-    nodes = [
-        ("/sys/.../3-2:1.0/0003:258A:002F.0004/hidraw/hidraw0", "/dev/hidraw0"),
-        ("/sys/.../3-2:1.1/0003:258A:002F.0005/hidraw/hidraw1", "/dev/hidraw1"),
-    ]
-    monkeypatch.setattr("engine.device._receiver_hidraw_nodes", lambda *a, **k: nodes)
-    assert find_hidraw() == "/dev/hidraw1"
-
-
-def test_find_hidraw_none_raises(monkeypatch):
-    monkeypatch.setattr("engine.device.find_hidraw", lambda *a, **k: None)
+def test_device_not_found_raises(monkeypatch):
+    monkeypatch.setattr(usb.core, "find", lambda *a, **kw: None)
     with pytest.raises(DeviceNotFoundError):
-        HatorDevice(path=None)
-
-
-def test_permission_denied(monkeypatch):
-    monkeypatch.setattr("engine.device.find_hidraw", lambda *a, **k: "/dev/hidraw0")
-    def raise_perm(p, flags):
-        raise PermissionError()
-    monkeypatch.setattr("engine.device.os.open", raise_perm)
-    with pytest.raises(PermissionError2):
-        HatorDevice(path=None)
+        HatorDevice(dev=None)
