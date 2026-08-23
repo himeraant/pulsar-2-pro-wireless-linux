@@ -1,6 +1,6 @@
 # HATOR Pulsar 2 Pro Linux Configurator
 
-A Python-based CLI tool for configuring the HATOR Pulsar 2 Pro gaming mouse on Linux. Control DPI settings, button bindings, polling rate, and monitor battery status. A graphical interface is planned.
+A Python-based CLI and GUI tool for configuring the HATOR Pulsar 2 Pro gaming mouse on Linux. Control DPI settings, button bindings, polling rate, and monitor battery status.
 
 ## Features
 
@@ -35,7 +35,7 @@ sudo pacman -S libusb gtk4 gobject-introspection
 Clone the repository and install in development mode:
 
 ```bash
-git clone https://github.com/yourusername/hator-port.git
+git clone <this repository's URL>
 cd hator-port
 python3 -m venv .venv
 source .venv/bin/activate
@@ -91,33 +91,39 @@ hator --battery
 
 #### DPI Management
 
-View DPI profiles:
+Set DPI slot values and active slot count:
 
 ```bash
-hator --dpi-count
-# Output: Available DPI profiles: 5
+hator --dpi 400 800 1600 3200 6400
+# Sets the DPI value for each slot (space-separated CPI values)
 
-hator --dpi
-# Output: DPI profiles: [400, 800, 1600, 3200, 6400]
+hator --dpi-count 5
+# Sets the active DPI slot count (1-7)
 ```
 
 Set active DPI:
 
 ```bash
-hator --active-dpi 3200
+hator --active-dpi 2
+# Sets the active DPI slot index (0-6), not a raw CPI value
+```
+
+To view the currently applied configuration (including DPI slots, active
+slot, polling rate, and button map), use `--get`:
+
+```bash
+hator --get
 ```
 
 #### Polling Rate
 
-Check current polling rate:
-
 ```bash
-hator --polling
-# Output: Polling rate: 1000 Hz
-
 hator --polling 500
 # Set polling rate to 500 Hz
 ```
+
+`--polling` requires one of 125, 250, 500, or 1000. Use `--get` to check the
+currently applied rate.
 
 #### Button Binding
 
@@ -125,15 +131,21 @@ View button mapping:
 
 ```bash
 hator --get
-# Output: Current bindings...
 ```
 
-Bind a mouse button to an action:
+Bind a physical mouse button (1-6) to an action. The action is an evdev key
+name (or an input-remapper `<macro>...</macro>` string), not an evdev button
+name:
 
 ```bash
-hator --bind BTN_SIDE keyboard:Return
-hator --bind BTN_EXTRA mouse:MiddleClick
+hator --bind 4 KEY_ENTER
+hator --bind 6 KEY_PLAYPAUSE
 ```
+
+Note: physical button 6 is the hidden DPI button. The mouse only exposes 5
+distinct host-visible button codes (left/right/middle/forward/backward), so
+binding button 6 aliases it on-device to the same action as button 4
+(Forward) — the CLI prints a warning to stderr when this collision occurs.
 
 Reset to defaults:
 
@@ -141,9 +153,22 @@ Reset to defaults:
 hator --default
 ```
 
-### GUI Interface (Planned)
+### GUI Interface
 
-A graphical configuration tool is planned for future release, providing visual management of all settings.
+A GTK4 graphical interface ships in `gui.py`. Launch it with:
+
+```bash
+python3 gui.py
+```
+
+Currently the GUI provides:
+- **Battery view** — reads and displays current battery level/status.
+- **Polling control** — a dropdown to view and change the polling rate,
+  wired directly to `engine.apply()`.
+- **DPI and button-map views** — read-only/informational labels showing the
+  currently saved DPI slots and button map. Editing DPI slots and button
+  bindings is CLI-only for now (`--dpi`, `--bind`); GUI editors for these are
+  a planned follow-up.
 
 ## Architecture
 
@@ -174,7 +199,9 @@ The HATOR Pulsar 2 Pro USB protocol was decoded based on research by [hampta/luo
 
 ## License
 
-[Your License Here]
+Upstream has no explicit license. Until one is added, treat this repository
+as "all rights reserved" by its authors; contact the maintainers before
+redistributing.
 
 ## Contributing
 
