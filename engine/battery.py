@@ -12,7 +12,11 @@ def read_battery(power_supply_dir: str | None = None) -> dict | None:
     power_supply_dir = power_supply_dir or "/sys/class/power_supply"
     if not os.path.isdir(power_supply_dir):
         return None
-    for name in os.listdir(power_supply_dir):
+    try:
+        entries = os.listdir(power_supply_dir)
+    except OSError:
+        return None
+    for name in entries:
         if "battery" not in name:
             continue
         node = os.path.join(power_supply_dir, name)

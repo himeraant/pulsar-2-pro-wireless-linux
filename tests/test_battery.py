@@ -19,3 +19,15 @@ def test_no_battery_node_returns_none(tmp_path):
 def test_tier2_stub():
     assert battery_unavailable()["status"] == "unavailable"
     assert battery_unavailable()["tier"] == 2
+
+
+def test_listdir_oserror_returns_none(tmp_path, monkeypatch):
+    """A permission error (or other OSError) enumerating power_supply nodes
+    must not crash the caller; read_battery should return None."""
+    import os as os_module
+
+    def raise_oserror(path):
+        raise OSError("Permission denied")
+
+    monkeypatch.setattr(os_module, "listdir", raise_oserror)
+    assert read_battery(str(tmp_path)) is None
