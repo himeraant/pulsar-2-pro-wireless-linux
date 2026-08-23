@@ -26,9 +26,9 @@ def test_apply_persists_and_applies(tmp_path):
     assert eng.get_state()["polling_rate"] == 500
 
 
-def test_apply_defaults():
+def test_apply_defaults(tmp_path):
     fake = FakeDevice()
-    eng = HatorEngine(device=fake)
+    eng = HatorEngine(device=fake, state_path=str(tmp_path / "s.json"))
     eff = eng.apply_defaults()
     assert eff["button_map"] == ["left", "right", "middle", "forward", "backward", "dpi"]
     assert fake.applied  # a sequence was sent
