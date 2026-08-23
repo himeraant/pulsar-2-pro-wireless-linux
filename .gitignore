@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtualenv
+.venv/
+
+# OS
+.DS_Store
+
+# Reverse-engineering captures (large binaries, commit deliberately if needed)
+pcap/*.pcapng
+
+# SDD / agent scratch workspace
+.superpowers/
