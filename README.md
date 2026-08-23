@@ -18,16 +18,14 @@ The configurator exposes four core capabilities:
 Install system dependencies:
 
 ```bash
-# Ubuntu/Debian
-sudo apt-get install libusb-1.0-0-dev
-sudo apt-get install gir1.2-gtk-4.0 libgirepository1.0-dev
+# Ubuntu/Debian  (python3-gi provides the Python `gi` module)
+sudo apt-get install libusb-1.0-0 python3-gi gir1.2-gtk-4.0
 
-# Fedora/RHEL
-sudo dnf install libusb-devel
-sudo dnf install gtk4-devel gobject-introspection-devel
+# Fedora/RHEL  (python3-gobject provides the Python `gi` module)
+sudo dnf install libusb python3-gobject gtk4
 
-# Arch
-sudo pacman -S libusb gtk4 gobject-introspection
+# Arch  (python-gobject provides the Python `gi` module)
+sudo pacman -S libusb python-gobject gtk4
 ```
 
 ### Python Package Installation
@@ -37,7 +35,10 @@ Clone the repository and install in development mode:
 ```bash
 git clone <this repository's URL>
 cd hator-port
-python3 -m venv .venv
+# --system-site-packages makes the system-installed GTK bindings (`gi`)
+# visible inside the venv; without it `import gi` fails even after you
+# install the system PyGObject package above.
+python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -46,7 +47,16 @@ The `requirements.txt` includes:
 - `pyusb>=1.2` — USB communication library
 - `pytest>=7.0` — Testing framework
 
-PyGObject (Python GTK4 bindings) must be installed as a system package, not via pip. See platform-specific instructions above.
+PyGObject (the Python `gi` module / GTK4 bindings) is intentionally NOT in
+`requirements.txt` because it is a system package on every mainstream distro
+(see the Prerequisites block above). Two consequences:
+
+1. Install the matching system package first (e.g. `python-gobject` on Arch,
+   `python3-gi` on Debian/Ubuntu, `python3-gobject` on Fedora).
+2. Create the venv with `--system-site-packages` so that system `gi` is
+   visible inside it. If your venv is already created without that flag,
+   recreate it (`rm -rf .venv && python3 -m venv --system-site-packages .venv`)
+   or run the GUI with your system Python instead of the venv's.
 
 ### udev Rule Installation
 

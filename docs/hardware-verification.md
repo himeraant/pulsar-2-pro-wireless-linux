@@ -20,8 +20,10 @@ sudo apt install libusb-1.0-0 python3-gi gir1.2-gtk-4.0 input-remapper
 ```
 
 ```bash
-# Python deps
-python3 -m venv .venv
+# Python deps. --system-site-packages makes the system-installed GTK
+# bindings (`gi`, e.g. Arch `python-gobject`) visible inside the venv,
+# so the GUI can import it.
+python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install -r requirements.txt        # pyusb, pytest
 ```
