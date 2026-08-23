@@ -20,10 +20,13 @@ class HatorEngine:
             self._device = HatorDevice()
         return self._device
 
-    def apply(self, config: dict) -> dict:
-        base = load_state(self.state_path) or default_config()
-        merged = default_config()
-        merged.update(base)
+    def apply(self, config: dict, reset: bool = False) -> dict:
+        if reset:
+            merged = default_config()
+        else:
+            base = load_state(self.state_path) or default_config()
+            merged = default_config()
+            merged.update(base)
         merged.update(config)
         sequence = build_apply_sequence(merged)
         self._get_device().apply_sequence(sequence)
@@ -31,12 +34,12 @@ class HatorEngine:
         return merged
 
     def apply_defaults(self) -> dict:
-        return self.apply({})
+        return self.apply({}, reset=True)
 
-    def get_state(self):
+    def get_state(self) -> dict | None:
         return load_state(self.state_path)
 
-    def read_battery(self):
+    def read_battery(self) -> dict | None:
         return read_battery()
 
     def close(self):

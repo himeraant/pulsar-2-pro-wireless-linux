@@ -43,3 +43,25 @@ def test_apply_merges_over_saved(tmp_path):
     eff = eng.get_state()
     assert eff["polling_rate"] == 250
     assert eff["active_slot"] == 2
+
+
+def test_apply_defaults_resets_customized_state(tmp_path):
+    """--default must bypass the saved-state merge and reset every field,
+    not just re-apply whatever was previously customized."""
+    fake = FakeDevice()
+    eng = HatorEngine(device=fake, state_path=str(tmp_path / "s.json"))
+    eng.apply({
+        "polling_rate": 250,
+        "active_slot": 3,
+        "cpi": [100, 200, 300, 400, 500, 600],
+        "button_map": ["disabled"] * 6,
+    })
+    assert eng.get_state()["polling_rate"] == 250
+
+    eff = eng.apply_defaults()
+
+    defaults = p.default_config()
+    assert eff == defaults
+    assert eng.get_state() == defaults
+    assert eng.get_state()["polling_rate"] == 1000
+    assert eng.get_state()["button_map"] == ["left", "right", "middle", "forward", "backward", "dpi"]
