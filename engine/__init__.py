@@ -38,3 +38,8 @@ class HatorEngine:
 
     def read_battery(self):
         return read_battery()
+
+    def close(self):
+        if self._device is not None and self._owns_device:
+            self._device.close()
+            self._device = None

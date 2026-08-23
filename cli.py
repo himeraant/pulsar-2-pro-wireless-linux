@@ -18,11 +18,12 @@ def _print_battery(engine):
 
 
 def _cmd_bind(engine, args):
+    bind_btn, bind_action = args.bind[0], args.bind[1]
     cfg = engine.get_state() or default_config()
     try:
-        physical_idx = int(args.bind_btn) - 1
+        physical_idx = int(bind_btn) - 1
     except (ValueError, TypeError):
-        print(f"Invalid button number: {args.bind_btn}", file=sys.stderr)
+        print(f"Invalid button number: {bind_btn}", file=sys.stderr)
         return 2
     # On-device exposure: assign a host-visible standard action to this slot.
     mapping = {0: "left", 1: "right", 2: "middle", 3: "forward", 4: "backward", 5: "forward"}
@@ -31,8 +32,8 @@ def _cmd_bind(engine, args):
     cfg["button_map"][physical_idx] = mapping[physical_idx]
     engine.apply(cfg)
     evdev = evdev_button_for(physical_idx)
-    write_preset(args.device_name, evdev, args.bind_action)
-    print(f"Bound button {args.bind_btn} to {args.bind_action} (on-device + input-remapper)")
+    write_preset(args.device_name, evdev, bind_action)
+    print(f"Bound button {bind_btn} to {bind_action} (on-device + input-remapper)")
     return 0
 
 
@@ -91,8 +92,7 @@ def main(argv=None):
         print("Configuration applied.")
         return 0
     finally:
-        # HatorDevice.close is owned by the engine; no-op here for engine lifecycle.
-        pass
+        engine.close()
 
 
 if __name__ == "__main__":
