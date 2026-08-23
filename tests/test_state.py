@@ -21,3 +21,11 @@ def test_load_missing_returns_none(tmp_path):
 
 def test_default_state_path_under_config():
     assert "hator" in default_state_path()
+
+
+def test_load_non_dict_json_returns_none(tmp_path):
+    path = str(tmp_path / "state.json")
+    with open(path, "w") as f:
+        json.dump([1, 2, 3], f)
+    assert load_state(path) is None
+

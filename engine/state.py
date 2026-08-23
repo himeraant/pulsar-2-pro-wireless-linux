@@ -15,7 +15,8 @@ def load_state(path=None):
         return None
     try:
         with open(path) as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, dict) else None
     except (OSError, json.JSONDecodeError):
         return None
 
