@@ -59,7 +59,11 @@ def build_window(engine=None):
 def run():
     from gi.repository import Gtk as _Gtk
     app = _Gtk.Application()
-    app.connect("activate", lambda a: build_window().present())
+    def on_activate(a):
+        win = build_window()
+        win.connect("close-request", lambda *_: a.quit())
+        win.present()
+    app.connect("activate", on_activate)
     app.run()
 
 
