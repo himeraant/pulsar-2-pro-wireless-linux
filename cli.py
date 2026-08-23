@@ -21,15 +21,33 @@ def _cmd_bind(engine, args):
     bind_btn, bind_action = args.bind[0], args.bind[1]
     cfg = engine.get_state() or default_config()
     try:
-        physical_idx = int(bind_btn) - 1
+        btn_num = int(bind_btn)
     except (ValueError, TypeError):
         print(f"Invalid button number: {bind_btn}", file=sys.stderr)
         return 2
+    if not 1 <= btn_num <= 6:
+        print(f"Invalid button number: {bind_btn}", file=sys.stderr)
+        return 2
+    physical_idx = btn_num - 1
     # On-device exposure: assign a host-visible standard action to this slot.
+    # NOTE: the mouse only exposes 5 distinct standard host-visible button
+    # codes (left/right/middle/forward/backward). The hidden 6th (DPI)
+    # button has no code of its own, so it is aliased to "forward" here -
+    # binding button 6 makes it emit the same HID event as button 4
+    # (Forward) unless button 4 is rebound to something else. See README.
     mapping = {0: "left", 1: "right", 2: "middle", 3: "forward", 4: "backward", 5: "forward"}
     while len(cfg["button_map"]) < 6:
         cfg["button_map"].append(default_config()["button_map"][len(cfg["button_map"])])
-    cfg["button_map"][physical_idx] = mapping[physical_idx]
+    chosen_action = mapping[physical_idx]
+    for other_idx, other_action in enumerate(cfg["button_map"][:6]):
+        if other_idx != physical_idx and other_action == chosen_action:
+            print(
+                f"Warning: button {btn_num}'s on-device action "
+                f"({chosen_action!r}) is already claimed by button "
+                f"{other_idx + 1}; both will emit the same HID event.",
+                file=sys.stderr,
+            )
+    cfg["button_map"][physical_idx] = chosen_action
     engine.apply(cfg)
     evdev = evdev_button_for(physical_idx)
     write_preset(args.device_name, evdev, bind_action)
