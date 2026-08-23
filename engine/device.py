@@ -32,12 +32,12 @@ class HatorDevice:
             )
         self._detached = []
         for i in range(3):
-            if self.dev.is_kernel_driver_active(i):
-                try:
+            try:
+                if self.dev.is_kernel_driver_active(i):
                     self.dev.detach_kernel_driver(i)
                     self._detached.append(i)
-                except usb.core.USBError:
-                    pass
+            except usb.core.USBError:
+                pass
         self.dev.set_configuration()
 
     def apply_sequence(self, sequence):
