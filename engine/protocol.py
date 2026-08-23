@@ -105,9 +105,18 @@ def apply_config(dev, *, polling_hz=None, dpi_slots=None) -> bytes:
     """Read current config, modify DPI/polling, write it back. Returns the blob."""
     _preamble(dev)
     blob = dev.feature_in(REPORT_CONFIG, CONFIG_SIZE)
+    if len(blob) < 26:
+        raise NotImplementedError(
+            "DPI/polling config is not supported on this receiver firmware: "
+            f"config report 0x08 is only {len(blob)} bytes."
+        )
     new_blob = build_config(blob, polling_hz=polling_hz, dpi_slots=dpi_slots)
-    # Write the config blob (command 0x21) and the unchanged button blob (0x22).
-    dev.feature_out(REPORT_CONFIG, new_blob[1:])
-    # Button map blob (command 0x22) - unchanged by DPI/polling; reuse the
-    # bytes read for the config's trailing button region when present.
+    try:
+        dev.feature_out(REPORT_CONFIG, new_blob[1:])
+    except Exception as e:
+        raise NotImplementedError(
+            "DPI/polling write not supported on this receiver firmware: "
+            f"SET_REPORT 0x08 rejected ({e}). Config reads work, but the "
+            "write mechanism differs from the captured VM device."
+        ) from e
     return new_blob

@@ -108,6 +108,9 @@ def main(argv=None):
         engine.apply(cfg)
         print("Configuration applied.")
         return 0
+    except NotImplementedError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     finally:
         engine.close()
 

@@ -25,17 +25,20 @@ transfers.
 `GET_REPORT 0x05` → `05 90 11 XX 00 00 00 00`. **Percentage = byte 3.** Confirmed
 working on the physical receiver.
 
-## Configuration (DPI / polling) — NOT yet implemented
+## Configuration (DPI / polling) — read works, write unresolved
 
-The VM capture (`DPI.pcapng` / `polling.pcapng`) showed a **520-byte report 0x08**
-blob holding the config (polling at offset 10, DPI slots at 13–25, encoding
-`reg = cpi/100 - 1`). However, the physical receiver on Linux exposes report 0x08
-as only **8 bytes** (after the `0x21` preamble it returns `08 21 00 00 00 00 00 00`).
-So the 520-byte config layout decoded from the capture does NOT match this
-device's firmware. DPI/polling writes are therefore NOT wired up: writing the
-520-byte blob here would be wrong and is blocked. This needs the real config
-mechanism probed on the physical device (the header bytes match, but the report
-is far smaller).
+After the `0x21` preamble, `GET_REPORT 0x08` returns the **154-byte config blob**:
+polling rate at byte 10 (`1..4` = 125/250/500/1000 Hz) and 7 DPI slots at
+bytes 13–25 (`reg = cpi/100 - 1`). The CLI/engine can read and decode this
+(`--get`).
+
+However, **SET_REPORT 0x08 writes are rejected** by this device (pipe/timeout
+errors at every size). The VM capture showed a 520-byte write that succeeded on
+the captured device, but this physical receiver's firmware does not accept the
+same write. So DPI/polling **writes are not yet working** — `--dpi`/`--polling`
+report "not supported". The real write mechanism on this firmware still needs to
+be found (possibly a vendor control request, or a report-0x05 command).
+
 
 
 ## Common command preamble (used before every config write)
