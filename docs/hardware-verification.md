@@ -49,13 +49,12 @@ lsusb | grep 258a
 # expected: ... SINOWEALTH 2.4G Wireless Receiver ...  (258a:002f)
 ```
 
-**Important:** `engine/protocol.py` is currently a placeholder for the wrong
-(Holtek) device, so the CLI detects your receiver but intentionally refuses to
-configure it until the Sinowealth protocol is reverse-engineered. Do that first:
-follow `docs/vm-capture.md` to capture the official app's traffic in the win11
-VM, then reimplement `engine/protocol.py`. Until then `--dpi`/`--polling`/
-`--bind`/`--default` raise `SinowealthProtocolNotImplemented` (expected), and
-`--battery`/`--get` still work.
+**Important: detach the receiver from the VM first.** The receiver cannot be
+configured from Linux while it is passed through to a running win11 VM
+(libusb returns "Resource busy"). Stop/undetach it from the VM so the Linux host
+can claim it. The configuration protocol for battery, DPI, and polling is now
+implemented (see `docs/sinowealth-protocol.md`); button remap is decoded but
+not yet wired into `--bind`.
 
 If the receiver does not appear, it may be bound to the VM or another host; free
 it before continuing.
