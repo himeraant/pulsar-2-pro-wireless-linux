@@ -1,6 +1,6 @@
 # HATOR Pulsar 2 Pro Linux Configurator
 
-A Python-based CLI and GUI tool for configuring the HATOR Pulsar 2 Pro gaming mouse on Linux. Control DPI settings, button bindings, polling rate, and monitor battery status.
+A Python-based CLI tool for configuring the HATOR Pulsar 2 Pro gaming mouse on Linux. Control DPI settings, button bindings, polling rate, and monitor battery status. A graphical interface is planned.
 
 ## Features
 
@@ -141,9 +141,9 @@ Reset to defaults:
 hator --default
 ```
 
-### GUI Interface
+### GUI Interface (Planned)
 
-A graphical configuration tool is available for visual management of all settings. (GUI implementation: see Task 9.)
+A graphical configuration tool is planned for future release, providing visual management of all settings.
 
 ## Architecture
 
@@ -151,7 +151,7 @@ A graphical configuration tool is available for visual management of all setting
 
 Button binding operates on two layers:
 
-1. **On-Device Exposure** — The mouse exposes up to 20 button slots via USB protocol. CLI bindings directly configure these slots.
+1. **On-Device Exposure** — The mouse exposes 8 button slots via USB protocol (6 configurable + 2 fixed). CLI bindings directly configure the configurable slots.
 2. **input-remapper Integration** — For advanced remapping (e.g., multi-key sequences), bindings are registered in input-remapper's configuration, allowing Linux to intercept and remap events system-wide.
 
 This hybrid approach gives you both immediate on-device configuration and the flexibility of system-wide input transformation.
