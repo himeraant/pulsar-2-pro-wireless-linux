@@ -3,25 +3,40 @@
 Reverse-engineered from USBPcap captures of the official HATOR app in a win11 VM
 (`pcap/*.pcapng`). Decoder tool: `tools/decode_usbpcap.py`.
 
-## Transport
+## Transport (verified on Linux hardware)
 
-The receiver exposes a HID interface (interface 1). Configuration and battery
-use **HID feature reports over control transfers** to the receiver:
+The receiver's HID interfaces are bound to `usbhid`. Config and battery use
+vendor reports (IDs 0x05, 0x08) on **USB interface 1**, accessed as HID control
+transfers:
 
-- Control OUT (host→device): `bmRequestType=0x21, bRequest=0x09 (SET_REPORT), wValue=0x0300|reportID, wIndex=0x0001`.
-- Control IN (device→host): `bmRequestType=0xA1, bRequest=0x01 (GET_REPORT), wValue=0x0300|reportID, wIndex=0x0001`.
+- `SET_REPORT` (OUT): `bmRequestType=0x21, bRequest=0x09, wValue=0x0300|reportID, wIndex=0x0001, data=[reportID, payload...]`
+- `GET_REPORT` (IN) : `bmRequestType=0xA1, bRequest=0x01, wValue=0x0300|reportID, wIndex=0x0001, wLength=size`
 
-Two feature reports matter:
+Interface 1 must be claimed (usbhid detached from it) to send these. The mouse
+pointer is on interface 0, so it keeps working. `engine/device.py` does this.
 
-| Report ID | Size | Purpose |
-|-----------|------|---------|
-| `0x05` | 8 bytes | Small commands / battery poll |
-| `0x08` | 520 bytes | Full configuration blob (DPI, polling, buttons) |
+**On this Linux device both reports are 8 bytes** (report descriptor: 7 data
+bytes + report ID). The battery and config reads both work via these control
+transfers.
 
-In USBPcap each control transfer appears as: a `SETUP` packet (contains the
-setup + any data OUT), then a `COMPLETE` packet (carries data IN). The header
-(`USBPCAP_BUFFER_PACKET_HEADER`, 27 bytes; +1 stage byte for control) is decoded
-in `tools/decode_usbpcap.py`.
+## Battery (verified on hardware)
+
+`SET_REPORT 0x05` → `05 90 00 00 00 00 00 00` (command `0x90`), then
+`GET_REPORT 0x05` → `05 90 11 XX 00 00 00 00`. **Percentage = byte 3.** Confirmed
+working on the physical receiver.
+
+## Configuration (DPI / polling) — NOT yet implemented
+
+The VM capture (`DPI.pcapng` / `polling.pcapng`) showed a **520-byte report 0x08**
+blob holding the config (polling at offset 10, DPI slots at 13–25, encoding
+`reg = cpi/100 - 1`). However, the physical receiver on Linux exposes report 0x08
+as only **8 bytes** (after the `0x21` preamble it returns `08 21 00 00 00 00 00 00`).
+So the 520-byte config layout decoded from the capture does NOT match this
+device's firmware. DPI/polling writes are therefore NOT wired up: writing the
+520-byte blob here would be wrong and is blocked. This needs the real config
+mechanism probed on the physical device (the header bytes match, but the report
+is far smaller).
+
 
 ## Common command preamble (used before every config write)
 
