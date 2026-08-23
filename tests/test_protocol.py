@@ -30,7 +30,7 @@ def test_build_sequence_starts_with_fixed_ctrl():
 
 
 def test_build_sequence_is_apply_snapshot():
-    # Sanity: 24 operations total (12 ctrl + 12 out), mirroring the decoded capture.
+    # Sanity: 24 operations total (16 ctrl + 8 out), mirroring the decoded capture.
     seq = p.build_apply_sequence(p.default_config())
     assert len(seq) == 24
 

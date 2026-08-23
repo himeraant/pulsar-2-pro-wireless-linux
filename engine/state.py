@@ -9,7 +9,7 @@ def default_state_path() -> str:
     return os.path.expanduser("~/.config/hator/state.json")
 
 
-def load_state(path=None):
+def load_state(path=None) -> dict | None:
     path = path or default_state_path()
     if not os.path.exists(path):
         return None

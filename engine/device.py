@@ -24,7 +24,7 @@ class DeviceNotFoundError(Exception):
 
 class HatorDevice:
     def __init__(self, dev=None):
-        self.dev = dev or usb.core.find(idVendor=VID, idProduct=PID)
+        self.dev = dev if dev is not None else usb.core.find(idVendor=VID, idProduct=PID)
         if self.dev is None:
             raise DeviceNotFoundError(
                 f"HATOR Pulsar 2 Pro not found (expect {VID:04x}:{PID:04x}). "

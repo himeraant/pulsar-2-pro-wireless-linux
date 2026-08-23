@@ -54,6 +54,8 @@ def test_injected_device_executes_sequence():
     assert fake.detached == []
 
 
-def test_device_not_found_raises():
+def test_device_not_found_raises(monkeypatch):
+    import usb.core
+    monkeypatch.setattr(usb.core, "find", lambda *a, **kw: None)
     with pytest.raises(DeviceNotFoundError):
         HatorDevice(dev=None)
