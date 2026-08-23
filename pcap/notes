@@ -1,0 +1,44 @@
+I don't know if you need it, but it may be useful.
+
+1.1.1 is a trackpad on my laptop
+1.2.x is my mouse
+
+battery:
+1977 and higher is just it reading battery state
+2031->2034 Plug in cable
+2039->2042 Unplug the cable
+
+DPI:
+676 from 7 to 6 slots
+1056 6->3
+1541 3->7
+
+3544 3rd set to 1500
+4268 6th -> 8600
+5365 5th -> 11500
+5833 1st -> 100
+6716 2nd -> 1400
+6824 4th -> 2600
+8830 7th -> 15500
+
+polling:
+429 250Hz
+955 500Hz
+1255 1000Hz
+1573 125Hz
+
+remap:
+935 6th set to DPI-
+1869 6th to Scroll Up
+
+2429 5th to triple click
+3025 5th to forward
+
+3505 5th to back
+
+5323 3rd to forward
+
+6515 2nd to forward
+
+macro:
+1665 6th set to macro "Press A" (Keydown A, 50 ms pause, Keyup A)

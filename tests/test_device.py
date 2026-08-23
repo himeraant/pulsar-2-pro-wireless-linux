@@ -1,61 +1,45 @@
 import pytest
-from engine import protocol as p
-from engine.device import (
-    HatorDevice,
-    DeviceNotFoundError,
-    SinowealthProtocolNotImplemented,
-)
+from engine.device import HatorDevice, DeviceNotFoundError
 
 
 class FakeUSB:
     def __init__(self):
         self.ctrl_calls = []
-        self.out_calls = []
-        self.detached = []
-        self.closed = False
-
-    def is_kernel_driver_active(self, i):
-        return i == 0
-
-    def detach_kernel_driver(self, i):
-        self.detached.append(i)
-
-    def attach_kernel_driver(self, i):
-        self.detached.remove(i)
-
-    def set_configuration(self):
-        pass
+        self.in_results = {}
 
     def ctrl_transfer(self, bm, b, v, idx, data):
-        self.ctrl_calls.append((bm, b, v, idx, data))
+        if isinstance(data, int):  # GET_REPORT read length
+            resp = self.in_results.get(v, bytes(data))
+            self.ctrl_calls.append((bm, b, v, idx, data, resp))
+            return bytes(resp)
+        self.ctrl_calls.append((bm, b, v, idx, bytes(data), None))
+        return None
 
-    def write(self, endpoint, data, timeout=None):
-        self.out_calls.append(bytes(data))
 
-    def dispose_resources(self):
-        self.closed = True
-
-
-def test_injected_device_executes_sequence():
+def test_feature_out_encodes_set_report():
     fake = FakeUSB()
     dev = HatorDevice(dev=fake)
-    seq = p.build_apply_sequence(p.default_config())
-    dev.apply_sequence(seq)
-    # 16 ctrl ops -> 16 ctrl_transfer calls; 8 out ops -> 8 writes
-    assert len(fake.ctrl_calls) == 16
-    assert len(fake.out_calls) == 8
-    # Each ctrl call has correct headers (bmRequestType, bRequest, wValue, wIndex)
-    for bm, b, v, idx, data in fake.ctrl_calls:
-        assert bm == 0x21  # class request, host-to-device
-        assert b == 0x09   # SET_REPORT
-        assert v == 0x0300 # VALUE_SET_REPORT
-        assert idx == 2    # INTERFACE
-    # Each ctrl payload is exactly the decoded hex
-    first_ctrl_hex = "2727d5fff4e57676"
-    assert fake.ctrl_calls[0][4].hex() == first_ctrl_hex  # Extract data from tuple
-    # Driver 0 was detached then re-attached on close
-    dev.close()
-    assert fake.detached == []
+    dev.feature_out(0x05, bytes.fromhex("90 00 00 00 00 00 00"))
+    bm, b, v, idx, data, _ = fake.ctrl_calls[-1]
+    assert bm == 0x21
+    assert b == 0x09  # SET_REPORT
+    assert v == 0x0305  # feature report id 0x05
+    assert idx == 0x0001
+    assert data == bytes.fromhex("05 90 00 00 00 00 00 00")
+
+
+def test_feature_in_encodes_get_report():
+    fake = FakeUSB()
+    fake.in_results[0x0305] = bytes.fromhex("05 90 11 35 00 00 00 00")
+    dev = HatorDevice(dev=fake)
+    resp = dev.feature_in(0x05, 8)
+    bm, b, v, idx, length, _ = fake.ctrl_calls[-1]
+    assert bm == 0xA1
+    assert b == 0x01  # GET_REPORT
+    assert v == 0x0305
+    assert idx == 0x0001
+    assert length == 8
+    assert resp == bytes.fromhex("05 90 11 35 00 00 00 00")
 
 
 def test_device_not_found_raises(monkeypatch):
@@ -63,12 +47,3 @@ def test_device_not_found_raises(monkeypatch):
     monkeypatch.setattr(usb.core, "find", lambda *a, **kw: None)
     with pytest.raises(DeviceNotFoundError):
         HatorDevice(dev=None)
-
-
-def test_real_sinowealth_receiver_raises_protocol_not_implemented(monkeypatch):
-    import usb.core
-    # A real receiver is found, but the protocol isn't decoded yet.
-    monkeypatch.setattr(usb.core, "find", lambda *a, **kw: FakeUSB())
-    with pytest.raises(SinowealthProtocolNotImplemented):
-        HatorDevice(dev=None)
-

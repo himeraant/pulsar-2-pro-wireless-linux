@@ -1,10 +1,10 @@
 """HATOR Pulsar 2 Pro configuration engine (CLI/GUI-independent core)."""
 from __future__ import annotations
 
-from .protocol import default_config, build_apply_sequence
+from .protocol import default_config, apply_config
 from .state import save_state, load_state, default_state_path
-from .battery import read_battery
-from .device import HatorDevice
+from .battery import read_battery, battery_unavailable
+from .device import HatorDevice, DeviceNotFoundError
 
 __all__ = ["HatorEngine", "HatorDevice", "default_config", "read_battery"]
 
@@ -28,8 +28,12 @@ class HatorEngine:
             merged = default_config()
             merged.update(base)
         merged.update(config)
-        sequence = build_apply_sequence(merged)
-        self._get_device().apply_sequence(sequence)
+        dev = self._get_device()
+        apply_config(
+            dev,
+            polling_hz=merged["polling_rate"],
+            dpi_slots=merged["cpi"],
+        )
         save_state(merged, self.state_path)
         return merged
 
@@ -40,7 +44,15 @@ class HatorEngine:
         return load_state(self.state_path)
 
     def read_battery(self) -> dict | None:
-        return read_battery()
+        # Tier 1: sysfs node; Tier 2: device feature report.
+        try:
+            dev = self._get_device()
+        except DeviceNotFoundError:
+            dev = None
+        info = read_battery(dev)
+        if info is None:
+            return battery_unavailable()
+        return info
 
     def close(self):
         if self._device is not None and self._owns_device:

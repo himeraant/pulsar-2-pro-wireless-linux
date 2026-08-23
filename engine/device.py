@@ -1,45 +1,38 @@
 """USB device access for the HATOR Pulsar 2 Pro (wireless) via pyusb.
 
-The wireless Pulsar 2 Pro uses a SINOWEALTH 2.4G receiver (VID 0x258a,
-PID 0x002f), NOT the Holtek 0x04d9:0xa09f device that the wired LUOM G10
-uses. engine/protocol.py currently contains the (placeholder) Holtek packet
-encoding; until the Sinowealth configuration protocol is reverse-engineered
-from USBPcap captures, a detected receiver raises SinowealthProtocolNotImplemented
-instead of sending those (wrong) packets to the device.
+The wireless Pulsar 2 Pro uses a SINOWEALTH 2.4G receiver (VID 0x258a, PID
+0x002f). Configuration and battery use HID feature reports (report IDs 0x05 and
+0x08) sent as standard control transfers to the default control pipe:
+
+  SET_REPORT (OUT): bmRequestType=0x21, bRequest=0x09, wValue=0x0300|report_id,
+                    wIndex=0x0001, data = [report_id, payload...]
+  GET_REPORT (IN) : bmRequestType=0xA1, bRequest=0x01, wValue=0x0300|report_id,
+                    wIndex=0x0001, wLength = report size
+
+The receiver's HID interfaces are bound to usbfs (not usbhid), so no kernel
+driver detach is required for control transfers.
 """
 from __future__ import annotations
-
-import time
 
 import usb.core
 import usb.util
 
-# The real device: SINOWEALTH 2.4G wireless receiver.
 SINOWEALTH_VID = 0x258A
 SINOWEALTH_PID = 0x002F
 
-CTRL_OP = "ctrl"
-OUT_OP = "out"
-EP3_OUT = 0x03
-CTRL_REQ = 0x21          # class request, host-to-device
 SET_REPORT = 0x09
-VALUE_SET_REPORT = 0x0300
-INTERFACE = 2
-SLEEP_S = 0.01
+GET_REPORT = 0x01
+HID_FEATURE = 0x0300  # report type 3 (feature) in the high byte of wValue
+INTERFACE = 0x0001    # wIndex (HID interface 1)
 
 
 class DeviceNotFoundError(Exception):
     pass
 
 
-class SinowealthProtocolNotImplemented(NotImplementedError):
-    """The receiver was found, but its config protocol is not decoded yet."""
-
-
 class HatorDevice:
     def __init__(self, dev=None):
-        injected = dev is not None
-        self.dev = dev if injected else usb.core.find(
+        self.dev = dev if dev is not None else usb.core.find(
             idVendor=SINOWEALTH_VID, idProduct=SINOWEALTH_PID
         )
         if self.dev is None:
@@ -48,46 +41,29 @@ class HatorDevice:
                 f"{SINOWEALTH_VID:04x}:{SINOWEALTH_PID:04x} SINOWEALTH). "
                 "Is the receiver plugged in? Check `lsusb | grep 258a`."
             )
-        if not injected:
-            # A real receiver is present but we don't have its protocol yet.
-            raise SinowealthProtocolNotImplemented(
-                "SINOWEALTH 2.4G receiver (258a:002f) detected, but its "
-                "configuration protocol is not yet reverse-engineered. "
-                "Capture it in the win11 VM with USBPcap (see "
-                "docs/vm-capture.md) and reimplement engine/protocol.py; "
-                "then this tool will configure the mouse."
-            )
-        self._detached = []
-        for i in range(3):
-            try:
-                if self.dev.is_kernel_driver_active(i):
-                    self.dev.detach_kernel_driver(i)
-                    self._detached.append(i)
-            except usb.core.USBError:
-                pass
-        self.dev.set_configuration()
 
-    def apply_sequence(self, sequence):
-        for kind, hexstr in sequence:
-            data = bytes.fromhex(hexstr)
-            if kind == CTRL_OP:
-                self.dev.ctrl_transfer(
-                    CTRL_REQ, SET_REPORT, VALUE_SET_REPORT, INTERFACE, data
-                )
-            elif kind == OUT_OP:
-                self.dev.write(EP3_OUT, data, timeout=1000)
-            else:
-                raise ValueError(f"Unknown op kind: {kind}")
-            time.sleep(SLEEP_S)
+    def feature_out(self, report_id: int, data: bytes) -> None:
+        """Send a feature report: data is the payload WITHOUT the report id."""
+        buf = bytes([report_id]) + data
+        self.dev.ctrl_transfer(
+            0x21, SET_REPORT, HID_FEATURE | report_id, INTERFACE, buf
+        )
 
-    def close(self):
-        if self.dev is None:
-            return
-        # Only call dispose_resources on real USB devices, not mocks
-        if hasattr(self.dev, '_ctx'):
+    def feature_in(self, report_id: int, size: int) -> bytes:
+        """Read a feature report; returns report_id + size-1 data bytes."""
+        resp = self.dev.ctrl_transfer(
+            0xA1, GET_REPORT, HID_FEATURE | report_id, INTERFACE, size
+        )
+        return bytes(resp)
+
+    def close(self) -> None:
+        try:
             usb.util.dispose_resources(self.dev)
-        for i in self._detached:
-            try:
-                self.dev.attach_kernel_driver(i)
-            except usb.core.USBError:
-                pass
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()

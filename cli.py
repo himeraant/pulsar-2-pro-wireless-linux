@@ -11,7 +11,7 @@ from bindings import evdev_button_for, write_preset
 def _print_battery(engine):
     info = engine.read_battery()
     if not info or info.get("status") == "unavailable":
-        print("Battery: unavailable (no sysfs node; Tier 2 not yet implemented)")
+        print("Battery: unavailable (no sysfs node and receiver busy/unreachable)")
         return
     level = info.get("level")
     print(f"Battery: {level if level is not None else '?'}%  ({info.get('status')})")
@@ -79,7 +79,6 @@ def main(argv=None):
             state = engine.get_state() or default_config()
             print(f"Polling rate : {state['polling_rate']} Hz")
             print(f"DPI slots    : {state['cpi']}")
-            print(f"Active DPI   : slot {state['active_slot'] + 1}")
             print(f"Button map   : {state['button_map']}")
             return 0
         if args.default:
