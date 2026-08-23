@@ -1,10 +1,18 @@
 """Reverse-engineered HID protocol for the HATOR Pulsar 2 Pro (Holtek 04D9:A09F).
 
-Reimplemented from USB packet captures decoded in hampta/luom-g10-config.
+PLACEHOLDER / WRONG DEVICE: this encoding was reimplemented from the wired
+Holtek LUOM G10 captures (hampta/luom-g10-config). The wireless Pulsar 2 Pro
+uses a SINOWEALTH 2.4G receiver (258a:002f), whose configuration protocol is
+NOT yet decoded. Until it is captured in the win11 VM (see docs/vm-capture.md)
+and reimplemented here, the packets in this module must NOT be sent to the
+device (engine.device raises SinowealthProtocolNotImplemented for a real
+receiver). The public API shape (build_apply_sequence, default_config, etc.)
+is intended to be reused by the Sinowealth implementation.
 Pure module: no pyusb imports here.
 """
 from __future__ import annotations
 
+# Placeholder Holtek device id; the real receiver is 258a:002f (see engine.device).
 VID = 0x04D9
 PID = 0xA09F
 

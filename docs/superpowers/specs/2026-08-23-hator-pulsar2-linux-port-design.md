@@ -7,7 +7,9 @@ Author: Jcode / user
 ## Purpose
 
 Provide a native Linux application to configure the HATOR Pulsar 2 Pro wireless
-gaming mouse (a rebrand of the LUOM G10, Holtek chipset `0x04D9:0xA09F`). The app
+gaming mouse. The wireless model uses a **SINOWEALTH 2.4G receiver
+(`0x258A:0x002F`)**, NOT the Holtek `0x04D9:0xA09F` device of the wired LUOM G10
+(an earlier "Pulsar 2 Pro = LUOM G10 rebrand" assumption was incorrect). The app
 must let the user:
 
 1. See the mouse battery charge.
@@ -162,7 +164,10 @@ The GUI/CLI present a single "bind" operation per physical button.
 
 ## Error handling
 
-- **Device not found**: clear message, verify `lsusb | grep 04d9`.
+- **Device not found**: clear message, verify `lsusb | grep 258a`.
+- **Protocol not yet decoded**: `SinowealthProtocolNotImplemented` when a real
+  `258a:002f` receiver is detected but the Sinowealth protocol hasn't been
+  captured yet (see `docs/vm-capture.md`).
 - **USB permission denied**: print the udev rule path and instruct applying
   `udev/99-hator-pulsar2.rules`.
 - **Write-only device**: document that settings cannot be read back; the local state

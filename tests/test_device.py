@@ -1,6 +1,10 @@
 import pytest
 from engine import protocol as p
-from engine.device import HatorDevice, DeviceNotFoundError
+from engine.device import (
+    HatorDevice,
+    DeviceNotFoundError,
+    SinowealthProtocolNotImplemented,
+)
 
 
 class FakeUSB:
@@ -59,3 +63,12 @@ def test_device_not_found_raises(monkeypatch):
     monkeypatch.setattr(usb.core, "find", lambda *a, **kw: None)
     with pytest.raises(DeviceNotFoundError):
         HatorDevice(dev=None)
+
+
+def test_real_sinowealth_receiver_raises_protocol_not_implemented(monkeypatch):
+    import usb.core
+    # A real receiver is found, but the protocol isn't decoded yet.
+    monkeypatch.setattr(usb.core, "find", lambda *a, **kw: FakeUSB())
+    with pytest.raises(SinowealthProtocolNotImplemented):
+        HatorDevice(dev=None)
+

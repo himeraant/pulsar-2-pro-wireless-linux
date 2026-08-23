@@ -40,14 +40,24 @@ sudo usermod -aG plugdev $USER
 
 ## 2. Connect the mouse and confirm it enumerates
 
-Plug the receiver into the host and confirm the device is visible:
+The wireless Pulsar 2 Pro uses a **SINOWEALTH 2.4G receiver**, NOT the Holtek
+`04d9:a09f` wired device. Plug the receiver into the host and confirm it is
+visible:
 
 ```bash
-lsusb | grep 04d9
-# expected: ... Holtek Semiconductor, Inc. ...  (04d9:a09f)
+lsusb | grep 258a
+# expected: ... SINOWEALTH 2.4G Wireless Receiver ...  (258a:002f)
 ```
 
-If it does not appear, the receiver may be bound to the VM or another host; free
+**Important:** `engine/protocol.py` is currently a placeholder for the wrong
+(Holtek) device, so the CLI detects your receiver but intentionally refuses to
+configure it until the Sinowealth protocol is reverse-engineered. Do that first:
+follow `docs/vm-capture.md` to capture the official app's traffic in the win11
+VM, then reimplement `engine/protocol.py`. Until then `--dpi`/`--polling`/
+`--bind`/`--default` raise `SinowealthProtocolNotImplemented` (expected), and
+`--battery`/`--get` still work.
+
+If the receiver does not appear, it may be bound to the VM or another host; free
 it before continuing.
 
 ## 3. Battery (your #1 priority — Tier 1 sysfs first)

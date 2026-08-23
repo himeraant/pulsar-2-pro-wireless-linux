@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Device VID/PID: `0x04D9:0xA09F` (Holtek). Verify with `lsusb | grep 04d9`.
+- Device VID/PID: `0x258A:0x002F` (SINOWEALTH 2.4G wireless receiver). Verify with `lsusb | grep 258a`. CORRECTION: an earlier assumption that this wireless model is a rebrand of the wired Holtek LUOM G10 (`0x04D9:0xA09F`) was wrong; `engine/protocol.py` is a placeholder for the Holtek encoding until the Sinowealth protocol is captured (see `docs/vm-capture.md`), and `engine/device.py` raises `SinowealthProtocolNotImplemented` for a real receiver.
 - DPI values are multiples of 50, max 12800. Register encoding: `reg = (cpi // 50) - 1`. Decode: `cpi = (reg + 1) * 50`.
 - Polling rate: only `125`, `250`, `500`, `1000` Hz.
 - On-device button map: 8 slots × 4 bytes. Slots 1-6 = Left, Right, Middle, Forward, Backward, DPI. Slots 7-8 are fixed/unused and must be written as `07000100 07000200`.
