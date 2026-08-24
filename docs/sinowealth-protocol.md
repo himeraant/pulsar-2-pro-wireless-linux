@@ -139,3 +139,17 @@ For a battery read, only the `0x90` exchange is needed (no preamble/write).
 `battery.pcapng`, `DPI.pcapng`, `polling.pcapng`, `remap.pcapng`,
 `macro.pcapng`. The user's `pcap/notes` file lists frame numbers for each
 operation (mouse is device `1.2`).
+
+## Active DPI slot — button-controlled, read-only
+
+The currently-active DPI slot is **changed by the DPI button** on the device, not
+by software. When the slot changes, the receiver emits report **0x07 on the
+interrupt IN endpoint EP 0x82**: `07 11 01 <slot> <reg_lo> <reg_hi> 00 00`
+(e.g. slot 3 → `07 11 01 03 0e 00`, slot 5 → `07 11 01 05 27 00`), where `reg`
+is the active slot's DPI register.
+
+- Control GET/SET of report 0x07 both fail (pipe error) — it is output-only.
+- The config blob does not store an active-slot index.
+- Therefore the active slot cannot be set programmatically; it is cycled with the
+  DPI button. The tool's `--dpi-count`/`--active-dpi` sets the *number of enabled
+  slots* (byte 11 = `0x20 + count`), which is what the DPI button cycles through.

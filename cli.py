@@ -79,6 +79,7 @@ def main(argv=None):
             state = engine.get_state() or default_config()
             print(f"Polling rate : {state['polling_rate']} Hz")
             print(f"DPI slots    : {state['cpi']}")
+            print(f"DPI slot count: {state.get('dpi_count', 7)} (DPI button cycles these)")
             print(f"Button map   : {state['button_map']}")
             return 0
         if args.default:
