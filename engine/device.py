@@ -58,10 +58,11 @@ class HatorDevice:
         usb.util.claim_interface(self.dev, INTERFACE)
         self._claimed = True
 
-    def feature_out(self, report_id: int, data: bytes) -> None:
+    def feature_out(self, report_id: int, data: bytes, timeout: int = 5000) -> None:
         buf = bytes([report_id]) + data
         self.dev.ctrl_transfer(
-            0x21, SET_REPORT, HID_FEATURE | report_id, INTERFACE, buf
+            0x21, SET_REPORT, HID_FEATURE | report_id, INTERFACE, buf,
+            timeout=timeout,
         )
 
     def feature_in(self, report_id: int, size: int) -> bytes:

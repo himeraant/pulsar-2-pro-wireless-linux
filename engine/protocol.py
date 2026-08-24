@@ -6,10 +6,13 @@ configured through HID feature reports sent over the receiver's hidraw node:
   report 0x05 (8 bytes)  - small commands / battery poll
   report 0x08 (520 bytes)- full configuration blob (DPI, polling, buttons)
 
-Pure module: no hidraw/os/fcntl imports here. It operates on an injected
-"device" object exposing feature_out(report_id, data) and feature_in(report_id, size).
+Pure module (no USB/hidraw/fcntl): it operates on an injected "device" object
+exposing feature_out(report_id, data) and feature_in(report_id, size). Only
+`os` is imported (to locate the bundled config template).
 """
 from __future__ import annotations
+
+import os
 
 REPORT_CMD = 0x05
 REPORT_CONFIG = 0x08
@@ -101,22 +104,30 @@ def build_config(blob: bytes, *, polling_hz=None, dpi_slots=None) -> bytes:
     return bytes(out)
 
 
+CONFIG_TEMPLATE = os.path.join(os.path.dirname(__file__), "config_template.bin")
+
+
+def _load_config_template() -> bytearray:
+    with open(CONFIG_TEMPLATE, "rb") as f:
+        return bytearray(f.read())
+
+
 def apply_config(dev, *, polling_hz=None, dpi_slots=None) -> bytes:
-    """Read current config, modify DPI/polling, write it back. Returns the blob."""
+    """Write DPI/polling to the receiver's config (report 0x08, 520 bytes).
+
+    The device only accepts a full 520-byte write with a longer timeout. The
+    config data (polling byte 10, DPI slots 13-25) lives in the first 154 bytes;
+    the trailing bytes (button map) come from the bundled template (captured
+    from this device, see config_template.bin).
+    """
     _preamble(dev)
-    blob = dev.feature_in(REPORT_CONFIG, CONFIG_SIZE)
-    if len(blob) < 26:
-        raise NotImplementedError(
-            "DPI/polling config is not supported on this receiver firmware: "
-            f"config report 0x08 is only {len(blob)} bytes."
-        )
-    new_blob = build_config(blob, polling_hz=polling_hz, dpi_slots=dpi_slots)
-    try:
-        dev.feature_out(REPORT_CONFIG, new_blob[1:])
-    except Exception as e:
-        raise NotImplementedError(
-            "DPI/polling write not supported on this receiver firmware: "
-            f"SET_REPORT 0x08 rejected ({e}). Config reads work, but the "
-            "write mechanism differs from the captured VM device."
-        ) from e
-    return new_blob
+    blob = _load_config_template()
+    if polling_hz is not None:
+        blob[10] = POLLING_TO_CODE[polling_hz]
+    if dpi_slots is not None:
+        for off, cpi in zip(DPI_OFFSETS, dpi_slots):
+            cpi = max(DPI_MIN, min(DPI_MAX, cpi))
+            reg = (cpi // 100) - 1
+            blob[off : off + 2] = reg.to_bytes(2, "little")
+    dev.feature_out(REPORT_CONFIG, blob[1:])
+    return bytes(blob)

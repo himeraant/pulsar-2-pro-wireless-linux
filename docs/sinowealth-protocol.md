@@ -25,19 +25,26 @@ transfers.
 `GET_REPORT 0x05` → `05 90 11 XX 00 00 00 00`. **Percentage = byte 3.** Confirmed
 working on the physical receiver.
 
-## Configuration (DPI / polling) — read works, write unresolved
+## Configuration (DPI / polling) — working
 
-After the `0x21` preamble, `GET_REPORT 0x08` returns the **154-byte config blob**:
+After the `0x21` preamble, `GET_REPORT 0x08` returns the **154-byte config**:
 polling rate at byte 10 (`1..4` = 125/250/500/1000 Hz) and 7 DPI slots at
-bytes 13–25 (`reg = cpi/100 - 1`). The CLI/engine can read and decode this
-(`--get`).
+bytes 13–25 (`reg = cpi/100 - 1`).
 
-However, **SET_REPORT 0x08 writes are rejected** by this device (pipe/timeout
-errors at every size). The VM capture showed a 520-byte write that succeeded on
-the captured device, but this physical receiver's firmware does not accept the
-same write. So DPI/polling **writes are not yet working** — `--dpi`/`--polling`
-report "not supported". The real write mechanism on this firmware still needs to
-be found (possibly a vendor control request, or a report-0x05 command).
+**Writing** DPI/polling works but requires:
+- The **full 520-byte config report** (the device rejects shorter writes and
+  validates the trailing button/config bytes, so a zero-padded write is ignored).
+- A **longer control-transfer timeout (~5000 ms)** (the device is slow to accept;
+  the default 1000 ms times out).
+
+`engine/protocol.py` builds the write from the bundled 520-byte template
+(`engine/config_template.bin`, captured from this device), setting the polling
+byte and the 7 DPI slots. Verified on the physical receiver: polling and DPI
+changes persist and read back correctly.
+
+Button remap (the separate `0x22` blob) is decoded structurally but not yet
+wired into `--bind`.
+
 
 
 

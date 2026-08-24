@@ -20,7 +20,7 @@ class FakeUSB:
     def attach_kernel_driver(self, i):
         self.detached = False
 
-    def ctrl_transfer(self, bm, b, v, idx, data):
+    def ctrl_transfer(self, bm, b, v, idx, data, timeout=None):
         if isinstance(data, int):  # GET_REPORT read length
             resp = self.in_results.get(v, bytes(data))
             self.ctrl_calls.append((bm, b, v, idx, data, resp))
