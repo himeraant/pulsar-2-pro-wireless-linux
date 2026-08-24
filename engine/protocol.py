@@ -69,7 +69,7 @@ def default_config() -> dict:
         "polling_rate": DEFAULT_POLLING_HZ,
         "cpi": list(DEFAULT_CPI),
         "dpi_count": 7,
-        "button_map": ["left", "right", "middle", "backward", "forward", "dpi"],
+        "button_map": ["left", "right", "middle", "back", "forward", "dpi_down"],
     }
 
 
@@ -198,13 +198,33 @@ def _load_button_template() -> bytearray:
         return bytearray(f.read())
 
 
-def apply_button_map(dev, btn_index: int, action: str) -> bytes:
-    """Rebind a physical button on-device (writes the command 0x22 button blob).
+def build_full_button_blob(button_map) -> bytes:
+    """Build a complete 0x22 button blob from a list of per-button action names.
 
-    Uses the bundled button template with the target button's entry changed.
+    Starts from the bundled template (which also carries the fixed button 7/8
+    and trailing scroll entries) and applies each button's action.
     """
     blob = _load_button_template()
-    blob = build_button_blob(blob, btn_index, action)
+    for i, action in enumerate(button_map[:BUTTON_MAX]):
+        if isinstance(action, str) and action in BUTTON_ACTIONS:
+            blob = build_button_blob(blob, i, action)
+    return bytes(blob)
+
+
+def apply_button_map(dev, blob: bytes) -> bytes:
+    """Write a full 0x22 button blob on-device, mirroring the official app.
+
+    The app writes the config blob (cmd 0x21) *before* the button blob
+    (cmd 0x22); without that preceding config write the receiver appears to
+    ignore the button map. We read the current config and echo it back, then
+    write the button blob.
+    """
     _preamble(dev)
-    dev.feature_out(REPORT_CONFIG, blob[1:])  # blob[0]=0x08 report id; send the rest
+    try:
+        cfg = dev.feature_in(REPORT_CONFIG, CONFIG_SIZE)  # GET_REPORT 0x08
+        if cfg and len(cfg) > 1:
+            dev.feature_out(REPORT_CONFIG, cfg[1:])      # echo config back (0x21)
+    except Exception:
+        pass  # if the read fails, fall through to the button write alone
+    dev.feature_out(REPORT_CONFIG, blob[1:])             # button blob (0x22)
     return bytes(blob)

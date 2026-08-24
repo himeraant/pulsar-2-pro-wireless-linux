@@ -6,6 +6,7 @@ from .protocol import (
     apply_config,
     apply_button_map,
     build_button_blob,
+    build_full_button_blob,
     BUTTON_ACTIONS,
 )
 from .state import save_state, load_state, default_state_path
@@ -48,10 +49,20 @@ class HatorEngine:
         return self.apply({}, reset=True)
 
     def apply_button(self, button: int, action: str) -> dict:
-        """Rebind a physical button on-device (button is 1-based)."""
-        blob = apply_button_map(self._get_device(), button - 1, action)
+        """Rebind a physical button on-device (button is 1-based).
+
+        Builds the button map from the saved state so previously-set buttons
+        are preserved, then writes it with the app's full sequence (config
+        echo + button blob).
+        """
         state = self.get_state() or default_config()
-        state["button_map"][button - 1] = action
+        bmap = list(state.get("button_map") or default_config()["button_map"])
+        while len(bmap) < 6:
+            bmap.append(default_config()["button_map"][len(bmap)])
+        bmap[button - 1] = action
+        blob = build_full_button_blob(bmap)
+        apply_button_map(self._get_device(), blob)
+        state["button_map"] = bmap
         save_state(state, self.state_path)
         return state
 

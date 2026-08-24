@@ -141,11 +141,25 @@ def test_build_button_blob_bad_index_raises():
 def test_apply_button_map_writes_button_blob():
     dev = MockDevice()
     dev.enqueue(0x05, bytes.fromhex("05 80 01 01 00 00 00 00"))  # ack
-    p.apply_button_map(dev, 5, "forward")  # button 6
-    written = [c for c in dev.feature_out_calls if c[0] == 0x08]
-    assert written
-    data = written[-1][1]
-    assert data[0] == 0x22  # command byte
-    # report data starts after [0x08(report), 0x22(cmd), ...]; entry5 at offset 8+20
-    # feature_out sends report_id + blob[1:], so entry index 5 -> offset 7+20
-    assert data[7 + 20 : 7 + 24] == bytes.fromhex("11 10 00 00")
+    dev.enqueue(0x08, make_blob())  # current config read, echoed back
+    blob = p.build_full_button_blob(
+        ["left", "right", "middle", "back", "forward", "forward"]  # button6->forward
+    )
+    p.apply_button_map(dev, blob)
+    writes = [c for c in dev.feature_out_calls if c[0] == 0x08]
+    assert len(writes) == 2  # config echo (0x21) then button blob (0x22)
+    # first write is the echoed config (cmd 0x21)
+    assert writes[0][1][0] == 0x21
+    # second write is the button blob (cmd 0x22)
+    data = writes[1][1]
+    assert data[0] == 0x22
+    assert data[7 + 20 : 7 + 24] == bytes.fromhex("11 10 00 00")  # btn6 entry5
+
+
+def test_build_full_button_blob_preserves_all_buttons():
+    blob = p.build_full_button_blob(
+        ["left", "right", "middle", "back", "forward", "play_pause"]
+    )
+    assert p.get_button_action(blob, 0) == "left"
+    assert p.get_button_action(blob, 4) == "forward"
+    assert p.get_button_action(blob, 5) == "play_pause"
