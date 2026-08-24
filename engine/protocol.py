@@ -54,7 +54,8 @@ BUTTON_ACTIONS = {
     "dpi_down":   (0x41, 0x02, 0x00, 0x00),
     "scroll_up":  (0x12, 0x01, 0x00, 0x00),
     "scroll_down":(0x12, 0x02, 0x00, 0x00),
-    # multimedia keys (e.g. play_pause) pending a capture of the app writing them
+    "play_pause": (0x22, 0x08, 0x00, 0x00),
+    # more multimedia keys (0x22 VALUE) pending captures of the app writing them
 }
 
 BUTTON_TEMPLATE = os.path.join(os.path.dirname(__file__), "button_template.bin")

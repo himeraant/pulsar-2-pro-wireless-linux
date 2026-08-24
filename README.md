@@ -154,7 +154,7 @@ hator --bind 4 dpi_up
 ```
 
 Available on-device actions: `left`, `right`, `middle`, `back`, `forward`,
-`dpi_up`, `dpi_down`, `scroll_up`, `scroll_down`.
+`dpi_up`, `dpi_down`, `scroll_up`, `scroll_down`, `play_pause`.
 
 **Host-side remap** via input-remapper, for arbitrary keyboard/macro output on
 buttons 1-5 (which have distinct host-visible events):

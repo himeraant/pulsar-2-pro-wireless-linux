@@ -120,13 +120,15 @@ Decoded `TYPE VALUE` action encodings:
 |------|---------|----------------|
 | `0x11` | mouse button action | `01` left, `02` right, `04` middle, `08` back, `10` forward |
 | `0x12` | scroll | `01` scroll up |
+| `0x22` | multimedia key | `08` play/pause |
 | `0x41` | DPI | `01` DPI up, `02` DPI down |
 | `0x70` | macro | `70 01 01 01` (single macro) |
 | `0x31` | macro (variable length) | `31 01 32 03` = triple-click |
 
 Observed writes: `remap.pcapng` frame 935 (button 6 → DPI-: entry 5 `41 02`),
-1869 (button 6 → Scroll Up: entry 5 `12 01`), and `macro.pcapng` (button 6 →
-macro: entry 5 `70 01 01 01`).
+1869 (button 6 → Scroll Up: entry 5 `12 01`), `macro.pcapng` (button 6 →
+macro: entry 5 `70 01 01 01`), and `6th-set-to-play-pause.pcapng` frame 987
+(button 6 → Play/Pause: entry 5 `22 08 00 00`).
 
 When a button is rebound on-device to a keyboard/media action, pressing it
 emits a key on EP 0x82 of the SINOWEALTH receiver — e.g. button 6 rebound to
@@ -134,8 +136,8 @@ Play/Pause emits `02 08 00 00` (keydown) / `02 00 00 00` (keyup)
 (`button-6-rebound-to-play-pause.pcapng`). This is why the DPI button is
 remappable on-device even though it has no host event of its own.
 
-The multimedia (e.g. `play_pause`) `TYPE VALUE` encoding for the `0x22` blob is
-still unknown; it will be captured when the app writes that action.
+The remaining multimedia-key `0x22` VALUES (next/prev/volume, etc.) are still
+unknown; capture the app writing each action to fill them in.
 
 ## Config write sequence
 
@@ -150,8 +152,8 @@ For a battery read, only the `0x90` exchange is needed (no preamble/write).
 
 ## Still to decode
 
-- The multimedia (e.g. `play_pause`) action encoding for the `0x22` button blob
-  (capture the app writing it). Macro value encoding beyond `70 01 01 01`.
+- Remaining multimedia-key `0x22` VALUES (next/prev/volume, etc.).
+  Macro value encoding beyond `70 01 01 01`.
 - Whether a button-only change needs the `0x21` config write (the app does both).
 
 ## Captures (`pcap/`)

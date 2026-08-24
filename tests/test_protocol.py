@@ -122,7 +122,14 @@ def test_build_button_blob_sets_entry():
 def test_build_button_blob_unknown_action_raises():
     blob = _button_blob()
     with pytest.raises(ValueError):
-        p.build_button_blob(blob, 5, "play_pause")  # not decoded yet
+        p.build_button_blob(blob, 5, "next_track")  # not decoded yet
+
+
+def test_play_pause_is_a_known_on_device_action():
+    blob = _button_blob()
+    out = p.build_button_blob(blob, 5, "play_pause")
+    assert out[28:32] == bytes.fromhex("22 08 00 00")
+    assert p.get_button_action(out, 5) == "play_pause"
 
 
 def test_build_button_blob_bad_index_raises():
