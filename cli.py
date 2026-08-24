@@ -13,6 +13,7 @@ from bindings import (
     list_bindings,
     find_origin_hash,
 )
+import media
 
 
 def _print_battery(engine):
@@ -151,6 +152,8 @@ def main(argv=None):
                         help="Remove the binding for a physical button (1-5)")
     parser.add_argument("--list-binds", action="store_true",
                         help="Show the current input-remapper bindings")
+    parser.add_argument("--media-daemon", action="store_true",
+                        help="Run the media-key daemon (reads raw hidraw, injects media keys via uinput)")
     parser.add_argument("--origin-hash", default=None,
                         help="input-remapper device origin_hash (auto-detected if python-evdev is installed)")
     parser.add_argument("--device-name", default=None, help="input-remapper device name (default: auto-detect)")
@@ -180,6 +183,8 @@ def main(argv=None):
             return _cmd_unbind(engine, args)
         if args.list_binds:
             return _cmd_list_binds(engine, args)
+        if args.media_daemon:
+            return media.run()
 
         cfg = default_config()
         changed = False

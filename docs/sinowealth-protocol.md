@@ -176,3 +176,32 @@ is the active slot's DPI register.
 - Therefore the active slot cannot be set programmatically; it is cycled with the
   DPI button. The tool's `--dpi-count`/`--active-dpi` sets the *number of enabled
   slots* (byte 11 = `0x20 + count`), which is what the DPI button cycles through.
+
+## Media keys and the "constant" report quirk
+
+The receiver's interface 1 HID report descriptor declares two input reports:
+- Report `0x01` — standard keyboard (GenericDesktop/Keyboard page).
+- Report `0x02` — **Consumer Control** (page `0x0C`), 24 media usages in three
+  8-bit groups, including Play/Pause (usage `0x00CD`) at byte0 bit 3.
+
+When a button is bound on-device to a media action, pressing it emits report
+`0x02` on EP 0x82 (e.g. `02 08 00 00` = Play/Pause). **However, all 24 media
+fields are declared `81 03` = Constant + Variable**, so the Linux kernel's hid
+driver treats them as padding and generates no input event — hence no
+`KEY_PLAYPAUSE` in libinput. The official Windows driver reads the raw report
+directly, so media works there.
+
+Workaround: `media.py` / `hator --media-daemon` reads the raw hidraw reports
+(which receive constant fields too), decodes report `0x02`, and injects the
+media key via uinput. Report `0x02` bit layout:
+
+| byte0 | usage | | byte1 | usage | | byte2 | usage |
+|-------|-------|-|-------|-------|-|-------|-------|
+| bit0 | 0xB5 NEXT | | bit0 | 0x183 | | bit0 | 0x221 |
+| bit1 | 0xB6 PREV | | bit1 | 0x194 | | bit1 | 0x223 |
+| bit2 | 0xB7 STOP | | bit2 | 0x186 | | bit2 | 0x224 |
+| bit3 | 0xCD PLAY/PAUSE | | bit3 | 0x188 | | bit3 | 0x225 |
+| bit4 | 0xE2 MUTE | | bit4 | 0x18A | | bit4 | 0x226 |
+| bit5 | 0xA2 | | bit5 | 0x192 | | bit5 | 0x227 |
+| bit6 | 0xE9 | | bit6 | 0x2A8 | | bit6 | 0x22A |
+| bit7 | 0xEA | | bit7 | 0x184 | | bit7 | 0x2B1 |

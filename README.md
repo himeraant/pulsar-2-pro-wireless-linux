@@ -45,11 +45,9 @@ pip install -r requirements.txt
 
 The `requirements.txt` includes:
 - `pyusb>=1.2` — USB communication library
+- `evdev>=1.4` — device discovery, `origin_hash` auto-detection, and the media
+  daemon (`--media-daemon`)
 - `pytest>=7.0` — Testing framework
-
-`python-evdev` is an optional dependency. Install it to let `--bind`
-auto-detect the device's `origin_hash`; without it you pass `--origin-hash`
-explicitly (see Button Binding).
 
 PyGObject (the Python `gi` module / GTK4 bindings) is intentionally NOT in
 `requirements.txt` because it is a system package on every mainstream distro
@@ -177,6 +175,23 @@ For input-remapper mappings to trigger, the device's `origin_hash` is needed. If
 <hash>` once and it is remembered. Button 6 (DPI) cannot take a host-only key
 via input-remapper because it emits no host event of its own — use an on-device
 action for it instead.
+
+#### Media keys (play/pause)
+
+On-device media actions (e.g. `--bind 6 play_pause`) DO change the button on the
+receiver, but the receiver declares its Consumer Control report as "constant",
+so the Linux kernel drops it and no media key event is generated. To actually
+get media keys, run the bundled daemon (needs `python-evdev` and `/dev/uinput`,
+run as root or in the `input`/`uinput` group):
+
+```bash
+hator --media-daemon
+```
+
+It reads the receiver's raw hidraw report, decodes the Consumer Control report
+(ID 0x02), and injects the matching media key (KEY_PLAYPAUSE, KEY_NEXTSONG,
+KEY_MUTE, volume, etc.) via uinput. Run it with `--bind 6 play_pause` to make
+the DPI button pause/play media.
 
 Reset to defaults:
 
