@@ -29,3 +29,18 @@ def test_mapping_names_are_valid_evdev_keys():
     from evdev import ecodes
     for usage, name in CONSUMER_KEYS.items():
         assert hasattr(ecodes, name), f"{name} is not a valid evdev constant"
+
+
+def test_usb_id_parses_interface_from_sysfs(tmp_path):
+    from media import _usb_id
+    syspath = tmp_path / "1-2" / "1-2:1.1"
+    syspath.mkdir(parents=True)
+    (syspath / "uevent").write_text(
+        "HID_ID=0003:0000258A:00002F0F\nHID_NAME=...\n"
+    )
+    info = _usb_id(str(syspath))
+    assert info is not None
+    vid, pid, iface = info
+    assert vid == 0x258A
+    assert pid == 0x2F0F
+    assert iface == 1

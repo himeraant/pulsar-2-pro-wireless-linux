@@ -61,8 +61,11 @@ def _usb_id(path: str):
     for line in u.splitlines():
         if line.startswith("HID_ID="):
             # HID_ID=bus:vendor:product
-            _, bus, v, p = line.split("=")[1].split(":")
-            vid, pid = int(v, 16), int(p, 16)
+            try:
+                bus, v, p = line.split("=")[1].split(":")
+                vid, pid = int(v, 16), int(p, 16)
+            except ValueError:
+                pass
     iface = None
     # device path contains e.g. .../1-2:1.1/...  -> interface 1
     for part in path.split("/"):
@@ -82,8 +85,8 @@ def find_hidraw(interface=1):
         info = _usb_id(syspath)
         if not info:
             continue
-        vid, pid, iface = info
-        if vid == VID and pid == PID and iface == interface:
+        vid, _pid, iface = info
+        if vid == VID and iface == interface:
             return dev
     return None
 
@@ -115,13 +118,27 @@ def _bits_to_keys(report: bytes):
     return pressed
 
 
+def list_hidraws():
+    """Return (dev, vid, pid, iface) for every hidraw node (for diagnostics)."""
+    out = []
+    for dev in glob.glob("/dev/hidraw*"):
+        syspath = os.path.join("/sys/class/hidraw", os.path.basename(dev), "device")
+        info = _usb_id(syspath)
+        out.append((dev,) + info if info else (dev, None, None, None))
+    return out
+
+
 def run(dev_path=None):
     if evdev is None:
         raise SystemExit("python-evdev is required for the media daemon "
                          "(pip install evdev)")
     dev_path = dev_path or find_hidraw(interface=1)
     if not dev_path:
-        raise SystemExit("HATOR receiver hidraw interface 1 not found")
+        print("HATOR receiver hidraw interface 1 not found. Available hidraws:")
+        for dev, vid, pid, iface in list_hidraws():
+            print(f"  {dev}: vendor={vid and hex(vid)} product={pid and hex(pid)} "
+                  f"interface={iface}")
+        raise SystemExit("use --dev <path> to specify the hidraw node manually")
     ui = build_uinput()
     fd = os.open(dev_path, os.O_RDONLY | os.O_NONBLOCK)
     print(f"media daemon: reading {dev_path}, injecting media keys")
