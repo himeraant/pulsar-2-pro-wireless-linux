@@ -11,6 +11,7 @@ Usage:
 """
 from __future__ import annotations
 
+import sys
 import glob
 import os
 import time
@@ -138,21 +139,42 @@ def list_hidraws():
     return out
 
 
-def run(dev_path=None, debug=False):
-    if evdev is None:
-        raise SystemExit("python-evdev is required for the media daemon "
-                         "(pip install evdev)")
-    dev_path = dev_path or find_hidraw(interface=1)
-    if not dev_path:
-        print("HATOR receiver hidraw interface 1 not found. Available hidraws:")
-        for dev, vid, pid, iface in list_hidraws():
-            print(f"  {dev}: vendor={vid and hex(vid)} product={pid and hex(pid)} "
-                  f"interface={iface}")
-        raise SystemExit("use --dev <path> to specify the hidraw node manually")
-    ui = build_uinput()
+def _emit(pressed, last, ui):
+    for key in pressed - last:
+        ui.write(E.EV_KEY, key, 1)
+    for key in last - pressed:
+        ui.write(E.EV_KEY, key, 0)
+    if pressed != last:
+        ui.syn()
+    return pressed
+
+
+def _run_pyusb(ui, last, debug):
+    """Read the Consumer Control report directly from the receiver's EP 0x82."""
+    from engine.device import HatorDevice
+    import usb.core
+
+    dev = HatorDevice()  # claims interface 1 (detaches usbhid)
+    print("media daemon: reading receiver EP 0x82, injecting media keys")
+    try:
+        while True:
+            try:
+                data = bytes(dev.dev.read(0x82, 8, timeout=200))
+            except usb.core.USBTimeoutError:
+                continue
+            except Exception:
+                time.sleep(0.05)
+                continue
+            if debug:
+                print("raw:", data.hex(" "))
+            last = _emit(_bits_to_keys(data), last, ui)
+    finally:
+        dev.close()
+
+
+def _run_hidraw(dev_path, ui, last, debug):
     fd = os.open(dev_path, os.O_RDONLY | os.O_NONBLOCK)
     print(f"media daemon: reading {dev_path}, injecting media keys")
-    last = set()
     try:
         while True:
             try:
@@ -167,18 +189,32 @@ def run(dev_path=None, debug=False):
                 continue
             if debug:
                 print("raw:", data.hex(" "))
-            pressed = _bits_to_keys(bytes(data))
-            for key in pressed - last:
-                ui.write(E.EV_KEY, key, 1)
-            for key in last - pressed:
-                ui.write(E.EV_KEY, key, 0)
-            if pressed != last:
-                ui.syn()
-            last = pressed
+            last = _emit(_bits_to_keys(bytes(data)), last, ui)
+    finally:
+        os.close(fd)
+
+
+def run(dev_path=None, debug=False, use_pyusb=True):
+    if evdev is None:
+        raise SystemExit("python-evdev is required for the media daemon "
+                         "(pip install evdev)")
+    ui = build_uinput()
+    last = set()
+    try:
+        if use_pyusb and not dev_path:
+            _run_pyusb(ui, last, debug)
+        else:
+            dev_path = dev_path or find_hidraw(interface=1)
+            if not dev_path:
+                print("HATOR receiver hidraw interface 1 not found. Available hidraws:")
+                for dev, vid, pid, iface in list_hidraws():
+                    print(f"  {dev}: vendor={vid and hex(vid)} product={pid and hex(pid)} "
+                          f"interface={iface}")
+                raise SystemExit("use --media-dev <path> to specify a hidraw node")
+            _run_hidraw(dev_path, ui, last, debug)
     except KeyboardInterrupt:
         pass
     finally:
-        os.close(fd)
         ui.close()
 
 
