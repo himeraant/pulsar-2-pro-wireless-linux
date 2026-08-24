@@ -1,7 +1,13 @@
 """HATOR Pulsar 2 Pro configuration engine (CLI/GUI-independent core)."""
 from __future__ import annotations
 
-from .protocol import default_config, apply_config
+from .protocol import (
+    default_config,
+    apply_config,
+    apply_button_map,
+    build_button_blob,
+    BUTTON_ACTIONS,
+)
 from .state import save_state, load_state, default_state_path
 from .battery import read_battery, battery_unavailable
 from .device import HatorDevice, DeviceNotFoundError
@@ -40,6 +46,14 @@ class HatorEngine:
 
     def apply_defaults(self) -> dict:
         return self.apply({}, reset=True)
+
+    def apply_button(self, button: int, action: str) -> dict:
+        """Rebind a physical button on-device (button is 1-based)."""
+        blob = apply_button_map(self._get_device(), button - 1, action)
+        state = self.get_state() or default_config()
+        state["button_map"][button - 1] = action
+        save_state(state, self.state_path)
+        return state
 
     def get_state(self) -> dict | None:
         return load_state(self.state_path)

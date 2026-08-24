@@ -42,3 +42,12 @@ remap:
 
 macro:
 1665 6th set to macro "Press A" (Keydown A, 50 ms pause, Keyup A)
+
+dpi-change:
+ 163 3rd slot
+165 4th
+174 5th
+~177 6th
+182 7th
+185 1st
+188 2nd

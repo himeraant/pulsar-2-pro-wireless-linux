@@ -102,20 +102,40 @@ blob, modify the relevant bytes, write it back.
 
 The button map is a second 520-byte blob written with command `0x22`
 (`08 22 00 50 00 00 00 00 ...`). It holds per-button entries of the form
-`TYPE VALUE P1 P2`:
+`TYPE VALUE P1 P2`, starting at byte 8. Physical button N maps to entry (N-1);
+button 6 (the DPI button) is entry 5 (bytes 28-31).
+
+| entry | button | default | notes |
+|-------|--------|---------|-------|
+| 0 | 1 (L) | `11 01 00 00` | |
+| 1 | 2 (R) | `11 02 00 00` | |
+| 2 | 3 (M) | `11 04 00 00` | |
+| 3 | 4 | `11 08 00 00` | back |
+| 4 | 5 | `11 10 00 00` | forward |
+| 5 | 6 (DPI) | `41 02 00 00` | |
+
+Decoded `TYPE VALUE` action encodings:
 
 | TYPE | Meaning | VALUE examples |
 |------|---------|----------------|
 | `0x11` | mouse button action | `01` left, `02` right, `04` middle, `08` back, `10` forward |
 | `0x12` | scroll | `01` scroll up |
 | `0x41` | DPI | `01` DPI up, `02` DPI down |
+| `0x70` | macro | `70 01 01 01` (single macro) |
 | `0x31` | macro (variable length) | `31 01 32 03` = triple-click |
 
-The first five entries map physical buttons Left/Right/Middle/Backward/Forward
-(bits `01 02 04 08 10`); a sixth entry is the DPI button. Button remap changes
-the `VALUE`/`TYPE` of the corresponding entry. (Exact physical-button-to-entry
-ordering and the full macro/multimedia action table still need pinning down from
-the `macro.pcapng` capture.)
+Observed writes: `remap.pcapng` frame 935 (button 6 → DPI-: entry 5 `41 02`),
+1869 (button 6 → Scroll Up: entry 5 `12 01`), and `macro.pcapng` (button 6 →
+macro: entry 5 `70 01 01 01`).
+
+When a button is rebound on-device to a keyboard/media action, pressing it
+emits a key on EP 0x82 of the SINOWEALTH receiver — e.g. button 6 rebound to
+Play/Pause emits `02 08 00 00` (keydown) / `02 00 00 00` (keyup)
+(`button-6-rebound-to-play-pause.pcapng`). This is why the DPI button is
+remappable on-device even though it has no host event of its own.
+
+The multimedia (e.g. `play_pause`) `TYPE VALUE` encoding for the `0x22` blob is
+still unknown; it will be captured when the app writes that action.
 
 ## Config write sequence
 
@@ -130,15 +150,16 @@ For a battery read, only the `0x90` exchange is needed (no preamble/write).
 
 ## Still to decode
 
-- Exact physical-button → entry index mapping and all action codes for button
-  remap (including macros/multimedia from `macro.pcapng`).
-- Whether changing buttons alone skips the `0x21` write.
+- The multimedia (e.g. `play_pause`) action encoding for the `0x22` button blob
+  (capture the app writing it). Macro value encoding beyond `70 01 01 01`.
+- Whether a button-only change needs the `0x21` config write (the app does both).
 
 ## Captures (`pcap/`)
 
 `battery.pcapng`, `DPI.pcapng`, `polling.pcapng`, `remap.pcapng`,
-`macro.pcapng`. The user's `pcap/notes` file lists frame numbers for each
-operation (mouse is device `1.2`).
+`macro.pcapng`, `dpi-change.pcapng`, `button-6-rebound-to-play-pause.pcapng`.
+The user's `pcap/notes` file lists frame numbers for each operation (mouse is
+device `1.2`, and `1.1.1` is the laptop trackpad).
 
 ## Active DPI slot — button-controlled, read-only
 

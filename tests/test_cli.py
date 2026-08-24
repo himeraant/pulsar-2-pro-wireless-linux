@@ -124,6 +124,37 @@ def test_cli_bind_button6_dpi_is_not_remappable(monkeypatch, capsys):
     assert "dpi" in err.lower()
 
 
+def test_cli_bind_on_device_action(monkeypatch, capsys):
+    """An on-device action (e.g. button 6 -> forward) writes the button map via
+    engine.apply_button and does not need an origin_hash."""
+    class ButtonEngine(_FakeEngine):
+        def __init__(self):
+            super().__init__()
+            self.buttons = []
+
+        def apply_button(self, button, action):
+            self.buttons.append((button, action))
+            return {}
+
+    engine = ButtonEngine()
+    monkeypatch.setattr("cli.HatorEngine", lambda *a, **k: engine)
+    rc = main(["--bind", "6", "forward"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert engine.buttons == [(6, "forward")]
+    assert "on-device" in out.lower()
+
+
+def test_cli_bind_button6_host_key_rejected(monkeypatch, capsys):
+    """button 6 cannot take a host-only key like KEY_PLAYPAUSE; must be an
+    on-device action."""
+    monkeypatch.setattr("cli.HatorEngine", _FakeEngine)
+    rc = main(["--bind", "6", "KEY_PLAYPAUSE"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "on-device" in err.lower()
+
+
 def test_cli_unbind_and_list_binds(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr("cli.HatorEngine", _FakeEngine)
 

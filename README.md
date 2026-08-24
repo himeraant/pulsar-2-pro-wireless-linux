@@ -141,36 +141,42 @@ currently applied rate.
 
 #### Button Binding
 
-Bind a physical mouse button (1-5) to an action. The action is an evdev key
-name (or an input-remapper `<macro>...</macro>` string). This writes a preset
-to input-remapper so Linux remaps the event system-wide:
+Bind a physical mouse button (1-6) to an action. Two mechanisms are used:
+
+**On-device remap** (preferred, works for all buttons including the DPI button).
+Device-native actions write the receiver's button map (command `0x22`):
+
+```bash
+hator --bind 6 forward          # DPI button -> Forward
+hator --bind 5 back             # button 5 -> Back
+hator --bind 6 scroll_up        # DPI button -> Scroll Up
+hator --bind 4 dpi_up
+```
+
+Available on-device actions: `left`, `right`, `middle`, `back`, `forward`,
+`dpi_up`, `dpi_down`, `scroll_up`, `scroll_down`.
+
+**Host-side remap** via input-remapper, for arbitrary keyboard/macro output on
+buttons 1-5 (which have distinct host-visible events):
 
 ```bash
 hator --bind 4 KEY_ENTER        # forward button -> Enter
-hator --bind 5 KEY_PLAYPAUSE    # backward button -> Play/Pause
+hator --bind 5 KEY_PLAYPAUSE
 ```
 
-Multiple `--bind` calls accumulate into one preset per device (each button can
-have one action). Remove or list them:
+Multiple `--bind` calls accumulate into one input-remapper preset per device.
+Remove or list them:
 
 ```bash
 hator --unbind 4                # clear forward button
 hator --list-binds              # show current bindings
 ```
 
-For a mapping to actually trigger, input-remapper needs the device's
-`origin_hash`. If `python-evdev` is installed, it is auto-detected from the
-HATOR receiver's event node; otherwise pass it explicitly (it is shown in the
-input-remapper GUI) once, and it is remembered:
-
-```bash
-hator --bind 4 KEY_ENTER --origin-hash <hash> --device-name "<evdev name>"
-```
-
-**Buttons 1-5** (left/right/middle/forward/backward) have distinct
-host-visible events and are remappable. **Button 6 (the DPI button) is not**
-host-remappable: it emits no standard HID button event (it only cycles DPI
-slots, reported via report 0x07), so input-remapper cannot see it.
+For input-remapper mappings to trigger, the device's `origin_hash` is needed. If
+`python-evdev` is installed it is auto-detected; otherwise pass `--origin-hash
+<hash>` once and it is remembered. Button 6 (DPI) cannot take a host-only key
+via input-remapper because it emits no host event of its own — use an on-device
+action for it instead.
 
 Reset to defaults:
 
@@ -199,16 +205,20 @@ Currently the GUI provides:
 
 ### Host-Side Binding Model
 
-Button remapping is done **host-side** via input-remapper (minimal
-reverse-engineering): the tool writes a JSON preset under
-`~/.config/input-remapper-2/presets/<device>/hator.json` that maps a physical
-button's evdev event to an output action. input-remapper's service intercepts
-the event and emits the mapped action system-wide.
+Button remapping uses two complementary layers:
 
-The preset's `input_combination` carries the device's `origin_hash` (the hash
-input-remapper uses to identify the event node) so the mapping only triggers on
-this mouse. Buttons 1-5 (left/right/middle/forward/backward) are remappable;
-the DPI button has no distinct host event and is not.
+1. **On-device remap** — writes the receiver's button map (command `0x22` blob,
+   see `docs/sinowealth-protocol.md`). Device-native actions (`left`/`right`/
+   `middle`/`back`/`forward`/`dpi_up`/`dpi_down`/`scroll_up`/`scroll_down`) work
+   for **all six buttons**, including the DPI button: a rebound button emits its
+   action as a key on EP 0x82, which Linux sees as normal input.
+2. **Host-side remap** — for arbitrary keyboard/macro output, the tool writes an
+   input-remapper JSON preset under
+   `~/.config/input-remapper-2/presets/<device>/hator.json` that maps a physical
+   button's evdev event to an output action. The preset's `input_combination`
+   carries the device's `origin_hash` so it only triggers on this mouse. Buttons
+   1-5 have distinct host-visible events and can be remapped this way; the DPI
+   button (no host event of its own) is on-device-only.
 
 ### Battery Monitoring Strategy
 

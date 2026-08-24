@@ -85,3 +85,60 @@ def test_dpi_count_out_of_range():
     blob = make_blob()
     with pytest.raises(ValueError):
         p.build_config(blob, dpi_count=9)
+
+
+def _button_blob(entries=None):
+    blob = bytearray(520)
+    blob[:8] = bytes.fromhex("08 22 00 50 00 00 00 00")
+    entries = entries or [
+        (0x11, 0x01, 0, 0), (0x11, 0x02, 0, 0), (0x11, 0x04, 0, 0),
+        (0x11, 0x08, 0, 0), (0x11, 0x10, 0, 0), (0x41, 0x02, 0, 0),
+    ]
+    for i, (t, v, p1, p2) in enumerate(entries):
+        off = p.BUTTON_ENTRY_OFFSET + i * p.BUTTON_ENTRY_SIZE
+        blob[off : off + 4] = bytes([t, v, p1, p2])
+    return bytes(blob)
+
+
+def test_get_button_action_defaults():
+    blob = _button_blob()
+    assert p.get_button_action(blob, 0) == "left"
+    assert p.get_button_action(blob, 1) == "right"
+    assert p.get_button_action(blob, 2) == "middle"
+    assert p.get_button_action(blob, 3) == "back"
+    assert p.get_button_action(blob, 4) == "forward"
+    assert p.get_button_action(blob, 5) == "dpi_down"  # button 6
+
+
+def test_build_button_blob_sets_entry():
+    blob = _button_blob()
+    out = p.build_button_blob(blob, 5, "forward")  # button 6 -> forward
+    assert out[28:32] == bytes.fromhex("11 10 00 00")
+    assert p.get_button_action(out, 5) == "forward"
+    # other entries unchanged
+    assert p.get_button_action(out, 0) == "left"
+
+
+def test_build_button_blob_unknown_action_raises():
+    blob = _button_blob()
+    with pytest.raises(ValueError):
+        p.build_button_blob(blob, 5, "play_pause")  # not decoded yet
+
+
+def test_build_button_blob_bad_index_raises():
+    blob = _button_blob()
+    with pytest.raises(ValueError):
+        p.build_button_blob(blob, 99, "forward")
+
+
+def test_apply_button_map_writes_button_blob():
+    dev = MockDevice()
+    dev.enqueue(0x05, bytes.fromhex("05 80 01 01 00 00 00 00"))  # ack
+    p.apply_button_map(dev, 5, "forward")  # button 6
+    written = [c for c in dev.feature_out_calls if c[0] == 0x08]
+    assert written
+    data = written[-1][1]
+    assert data[0] == 0x22  # command byte
+    # report data starts after [0x08(report), 0x22(cmd), ...]; entry5 at offset 8+20
+    # feature_out sends report_id + blob[1:], so entry index 5 -> offset 7+20
+    assert data[7 + 20 : 7 + 24] == bytes.fromhex("11 10 00 00")

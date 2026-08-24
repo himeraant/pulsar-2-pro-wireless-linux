@@ -36,6 +36,29 @@ DPI_MAX = 16000
 
 BUTTON_OFFSET = 27  # command 0x22 blob, per-button entries start here (see notes)
 
+# On-device button map (command 0x22 blob). The blob is report 0x08 written
+# with command 0x22; entries are 4 bytes `TYPE VALUE P1 P2` starting at byte 8.
+# Physical button N maps to entry (N-1); the DPI button is button 6 -> entry 5.
+BUTTON_ENTRY_OFFSET = 8
+BUTTON_ENTRY_SIZE = 4
+BUTTON_MAX = 8
+
+# Logical on-device action -> (TYPE, VALUE, P1, P2)  (decoded from captures)
+BUTTON_ACTIONS = {
+    "left":       (0x11, 0x01, 0x00, 0x00),
+    "right":      (0x11, 0x02, 0x00, 0x00),
+    "middle":     (0x11, 0x04, 0x00, 0x00),
+    "back":       (0x11, 0x08, 0x00, 0x00),
+    "forward":    (0x11, 0x10, 0x00, 0x00),
+    "dpi_up":     (0x41, 0x01, 0x00, 0x00),
+    "dpi_down":   (0x41, 0x02, 0x00, 0x00),
+    "scroll_up":  (0x12, 0x01, 0x00, 0x00),
+    "scroll_down":(0x12, 0x02, 0x00, 0x00),
+    # multimedia keys (e.g. play_pause) pending a capture of the app writing them
+}
+
+BUTTON_TEMPLATE = os.path.join(os.path.dirname(__file__), "button_template.bin")
+
 DEFAULT_CPI = [400, 800, 1200, 1600, 2400, 3200, 6400]  # 7 slots
 DEFAULT_POLLING_HZ = 1000
 
@@ -139,4 +162,48 @@ def apply_config(dev, *, polling_hz=None, dpi_slots=None, dpi_count=None) -> byt
             raise ValueError(f"DPI slot count must be 1-7, got {dpi_count}")
         blob[11] = 0x20 + dpi_count
     dev.feature_out(REPORT_CONFIG, blob[1:])
+    return bytes(blob)
+
+
+def get_button_action(blob: bytes, btn_index: int) -> str | None:
+    """Decode the on-device action of a physical button (0-based) from a 0x22 blob."""
+    off = BUTTON_ENTRY_OFFSET + btn_index * BUTTON_ENTRY_SIZE
+    if off + BUTTON_ENTRY_SIZE > len(blob):
+        return None
+    entry = tuple(blob[off : off + BUTTON_ENTRY_SIZE])
+    for name, enc in BUTTON_ACTIONS.items():
+        if enc == entry:
+            return name
+    return None
+
+
+def build_button_blob(blob: bytes, btn_index: int, action: str) -> bytes:
+    """Return a modified copy of a 0x22 button blob with one button's action set."""
+    if action not in BUTTON_ACTIONS:
+        raise ValueError(
+            f"Unknown on-device action {action!r}. Known: "
+            + ", ".join(sorted(BUTTON_ACTIONS))
+        )
+    if not 0 <= btn_index < BUTTON_MAX:
+        raise ValueError(f"button index must be 0-{BUTTON_MAX - 1}, got {btn_index}")
+    out = bytearray(blob)
+    off = BUTTON_ENTRY_OFFSET + btn_index * BUTTON_ENTRY_SIZE
+    out[off : off + BUTTON_ENTRY_SIZE] = bytes(BUTTON_ACTIONS[action])
+    return bytes(out)
+
+
+def _load_button_template() -> bytearray:
+    with open(BUTTON_TEMPLATE, "rb") as f:
+        return bytearray(f.read())
+
+
+def apply_button_map(dev, btn_index: int, action: str) -> bytes:
+    """Rebind a physical button on-device (writes the command 0x22 button blob).
+
+    Uses the bundled button template with the target button's entry changed.
+    """
+    blob = _load_button_template()
+    blob = build_button_blob(blob, btn_index, action)
+    _preamble(dev)
+    dev.feature_out(REPORT_CONFIG, blob[1:])  # blob[0]=0x08 report id; send the rest
     return bytes(blob)

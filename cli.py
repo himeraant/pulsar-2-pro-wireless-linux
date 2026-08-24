@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from engine import HatorEngine
-from engine.protocol import default_config, POLLING_OPTIONS
+from engine.protocol import default_config, POLLING_OPTIONS, BUTTON_ACTIONS
 from engine.state import save_state
 from bindings import (
     BindError,
@@ -59,6 +59,25 @@ def _cmd_bind(engine, args):
         return 2
     if not 1 <= btn_num <= 6:
         print(f"Invalid button number: {btn_num}", file=sys.stderr)
+        return 2
+    # Preferred: on-device remap for device-native actions (works for button 6).
+    if bind_action.lower() in BUTTON_ACTIONS:
+        action = bind_action.lower()
+        try:
+            engine.apply_button(btn_num, action)
+        except Exception as e:
+            print(f"error: could not write on-device button map: {e}", file=sys.stderr)
+            return 2
+        print(f"Bound button {btn_num} to on-device action '{action}'.")
+        return 0
+    # Fallback: host-side input-remapper for arbitrary keys on buttons 1-5.
+    if btn_num == 6:
+        print(
+            "error: button 6 (DPI) has no host-visible event, so it can only be "
+            "set to an on-device action. Use one of: "
+            + ", ".join(sorted(BUTTON_ACTIONS)),
+            file=sys.stderr,
+        )
         return 2
     resolved = _resolve_origin_hash(engine, args)
     if resolved is None:
