@@ -1,0 +1,10 @@
+[Unit]
+Description=HATOR Pulsar 2 Pro media key daemon (uinput injection)
+# Started by udev when the receiver is plugged in; not enabled at boot.
+
+[Service]
+Type=simple
+ExecStart=@PYTHON@ @MEDIA@
+Restart=no
+
+[Install]

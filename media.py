@@ -156,15 +156,22 @@ def _run_pyusb(ui, last, debug):
 
     dev = HatorDevice()  # claims interface 1 (detaches usbhid)
     print("media daemon: reading receiver EP 0x82, injecting media keys")
+    failures = 0
     try:
         while True:
             try:
                 data = bytes(dev.dev.read(0x82, 8, timeout=200))
             except usb.core.USBTimeoutError:
+                failures = 0
                 continue
             except Exception:
-                time.sleep(0.05)
+                failures += 1
+                if failures > 100:  # ~20s of failures: receiver likely unplugged
+                    print("media daemon: receiver appears disconnected, exiting")
+                    return
+                time.sleep(0.2)
                 continue
+            failures = 0
             if debug:
                 print("raw:", data.hex(" "))
             last = _emit(_bits_to_keys(data), last, ui)

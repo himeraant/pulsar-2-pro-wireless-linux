@@ -13,6 +13,7 @@ from bindings import (
     list_bindings,
     find_origin_hash,
 )
+import shutil
 import media
 
 
@@ -49,6 +50,14 @@ def _resolve_origin_hash(engine, args) -> tuple[str, str] | None:
         # have the hash but no known device name; use the requested one
         return args.device_name or "HATOR Mouse", origin
     return None
+
+
+def _input_remapper_available() -> bool:
+    """True if an input-remapper binary or service is installed."""
+    for name in ("input-remapper", "input-remapper-service", "input-remapper-control"):
+        if shutil.which(name):
+            return True
+    return False
 
 
 def _cmd_bind(engine, args):
@@ -100,6 +109,14 @@ def _cmd_bind(engine, args):
         return 2
     print(f"Bound button {btn_num} to {bind_action} via input-remapper ({path})")
     print(f"  device: {device_name}  origin_hash: {origin_hash}")
+    if not _input_remapper_available():
+        print(
+            "  warning: input-remapper is not installed/running, so this preset "
+            "is not applied yet. Install it (Arch: yay -S input-remapper), then "
+            "start it and enable the 'hator' preset for the device (or set it in "
+            "autoload).",
+            file=sys.stderr,
+        )
     return 0
 
 

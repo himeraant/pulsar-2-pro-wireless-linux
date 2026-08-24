@@ -1,0 +1,2 @@
+# Start the HATOR media daemon when the receiver is plugged in.
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002f", TAG+="systemd", ENV{SYSTEMD_WANTS}="hator-media.service"

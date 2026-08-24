@@ -193,6 +193,29 @@ It reads the receiver's raw hidraw report, decodes the Consumer Control report
 KEY_MUTE, volume, etc.) via uinput. Run it with `--bind 6 play_pause` to make
 the DPI button pause/play media.
 
+To auto-start it whenever the receiver is plugged in (as a root system service
+triggered by udev):
+
+```bash
+sudo ./install_autostart.sh
+```
+
+This installs udev rules (uinput + receiver USB access, and a trigger that
+starts the daemon on plug) plus a `hator-media.service` systemd unit.
+
+> Note: the daemon claims the receiver's keyboard interface to read the media
+> report, so it must run as root (or with permission to unbind the kernel
+> driver). The `--media-daemon` command works the same way.
+
+#### Arbitrary keys (KEY_ENTER etc.)
+
+Host-side binds for arbitrary keys (e.g. `--bind 4 KEY_ENTER`) go through
+**input-remapper**. That requires input-remapper to be installed and running;
+without it the preset file is written but not applied (the CLI prints a warning
+if it detects this). Install it on Arch with `yay -S input-remapper`, start it,
+and enable the `hator` preset for the device (or set it in autoload). On-device
+actions (`play_pause`, `forward`, etc.) do not need input-remapper.
+
 Reset to defaults:
 
 ```bash

@@ -1,0 +1,6 @@
+# /dev/uinput access for the HATOR media daemon (uinput injection).
+KERNEL=="uinput", GROUP="input", MODE="0666"
+
+# Keep raw USB + hidraw access for the receiver (pyusb config + media daemon).
+SUBSYSTEM=="usb", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002f", MODE="0666", GROUP="plugdev"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002f", MODE="0666", GROUP="plugdev"
