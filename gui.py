@@ -7,7 +7,6 @@ from gi.repository import Gtk
 
 from engine import HatorEngine
 from engine.protocol import default_config, POLLING_OPTIONS
-from bindings import evdev_button_for, write_preset
 
 
 def build_window(engine=None):

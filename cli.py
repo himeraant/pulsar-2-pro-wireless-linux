@@ -5,7 +5,14 @@ import sys
 
 from engine import HatorEngine
 from engine.protocol import default_config, POLLING_OPTIONS
-from bindings import evdev_button_for, write_preset
+from engine.state import save_state
+from bindings import (
+    BindError,
+    set_binding,
+    unbind,
+    list_bindings,
+    find_origin_hash,
+)
 
 
 def _print_battery(engine):
@@ -17,41 +24,97 @@ def _print_battery(engine):
     print(f"Battery: {level if level is not None else '?'}%  ({info.get('status')})")
 
 
+def _resolve_origin_hash(engine, args) -> tuple[str, str] | None:
+    """Return (device_name, origin_hash), resolving from arg -> state -> evdev."""
+    origin = args.origin_hash or (engine.get_state() or {}).get("origin_hash")
+    device = args.device_name or (engine.get_state() or {}).get("device_name")
+    if not origin:
+        found = find_origin_hash(device)
+        if found:
+            name, origin = found
+            if not device or name != device:
+                device = name
+    if origin and device:
+        # persist for next time so the user only does this once
+        try:
+            st = engine.get_state() or default_config()
+            st["origin_hash"] = origin
+            st["device_name"] = device
+            save_state(st, engine.state_path)
+        except Exception:
+            pass
+        return device, origin
+    if origin:
+        # have the hash but no known device name; use the requested one
+        return args.device_name or "HATOR Mouse", origin
+    return None
+
+
 def _cmd_bind(engine, args):
-    bind_btn, bind_action = args.bind[0], args.bind[1]
-    cfg = engine.get_state() or default_config()
     try:
-        btn_num = int(bind_btn)
+        btn_num = int(args.bind[0])
+        bind_action = args.bind[1]
     except (ValueError, TypeError):
-        print(f"Invalid button number: {bind_btn}", file=sys.stderr)
+        print(f"Invalid button number: {args.bind[0]}", file=sys.stderr)
         return 2
     if not 1 <= btn_num <= 6:
-        print(f"Invalid button number: {bind_btn}", file=sys.stderr)
+        print(f"Invalid button number: {btn_num}", file=sys.stderr)
         return 2
-    physical_idx = btn_num - 1
-    # On-device exposure: assign a host-visible standard action to this slot.
-    # NOTE: the mouse only exposes 5 distinct standard host-visible button
-    # codes (left/right/middle/forward/backward). The hidden 6th (DPI)
-    # button has no code of its own, so it is aliased to "forward" here -
-    # binding button 6 makes it emit the same HID event as button 4
-    # (Forward) unless button 4 is rebound to something else. See README.
-    mapping = {0: "left", 1: "right", 2: "middle", 3: "forward", 4: "backward", 5: "forward"}
-    while len(cfg["button_map"]) < 6:
-        cfg["button_map"].append(default_config()["button_map"][len(cfg["button_map"])])
-    chosen_action = mapping[physical_idx]
-    for other_idx, other_action in enumerate(cfg["button_map"][:6]):
-        if other_idx != physical_idx and other_action == chosen_action:
-            print(
-                f"Warning: button {btn_num}'s on-device action "
-                f"({chosen_action!r}) is already claimed by button "
-                f"{other_idx + 1}; both will emit the same HID event.",
-                file=sys.stderr,
-            )
-    cfg["button_map"][physical_idx] = chosen_action
-    engine.apply(cfg)
-    evdev = evdev_button_for(physical_idx)
-    write_preset(args.device_name, evdev, bind_action)
-    print(f"Bound button {bind_btn} to {bind_action} (on-device + input-remapper)")
+    resolved = _resolve_origin_hash(engine, args)
+    if resolved is None:
+        print(
+            "error: could not determine the device origin_hash (needed for a "
+            "working input-remapper preset). Install python-evdev so it can be "
+            "auto-detected, or pass --origin-hash <hash> from input-remapper.",
+            file=sys.stderr,
+        )
+        return 2
+    device_name, origin_hash = resolved
+    try:
+        path = set_binding(
+            device_name, btn_num - 1, bind_action, origin_hash,
+            name=f"Button {btn_num} -> {bind_action}",
+        )
+    except BindError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    print(f"Bound button {btn_num} to {bind_action} via input-remapper ({path})")
+    print(f"  device: {device_name}  origin_hash: {origin_hash}")
+    return 0
+
+
+def _cmd_unbind(engine, args):
+    try:
+        btn_num = int(args.unbind)
+    except (ValueError, TypeError):
+        print(f"Invalid button number: {args.unbind}", file=sys.stderr)
+        return 2
+    if not 1 <= btn_num <= 6:
+        print(f"Invalid button number: {btn_num}", file=sys.stderr)
+        return 2
+    device = args.device_name or (engine.get_state() or {}).get("device_name") or "HATOR Mouse"
+    try:
+        removed = unbind(device, btn_num - 1)
+    except BindError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    if removed:
+        print(f"Unbound button {btn_num}.")
+    else:
+        print(f"Button {btn_num} had no binding to remove.")
+    return 0
+
+
+def _cmd_list_binds(engine, args):
+    device = args.device_name or (engine.get_state() or {}).get("device_name") or "HATOR Mouse"
+    binds = list_bindings(device)
+    if not binds:
+        print(f"No bindings for {device!r}.")
+        return 0
+    print(f"Bindings for {device!r}:")
+    for b in binds:
+        label = f"Button {b['btn']}" if b["btn"] else b["evdev"]
+        print(f"  {label:<12} -> {b['action']}")
     return 0
 
 
@@ -64,8 +127,14 @@ def main(argv=None):
     parser.add_argument("--polling", type=int, metavar="HZ", choices=list(POLLING_OPTIONS),
                         help="Polling rate: 125/250/500/1000")
     parser.add_argument("--bind", nargs=2, metavar=("BTN", "ACTION"),
-                        help="Bind a physical button (1-6) to an action (e.g. --bind 6 KEY_PLAYPAUSE)")
-    parser.add_argument("--device-name", default="HATOR Mouse", help="input-remapper device name")
+                        help="Bind a physical button (1-5) to an action (e.g. --bind 4 KEY_PLAYPAUSE)")
+    parser.add_argument("--unbind", type=int, metavar="BTN",
+                        help="Remove the binding for a physical button (1-5)")
+    parser.add_argument("--list-binds", action="store_true",
+                        help="Show the current input-remapper bindings")
+    parser.add_argument("--origin-hash", default=None,
+                        help="input-remapper device origin_hash (auto-detected if python-evdev is installed)")
+    parser.add_argument("--device-name", default=None, help="input-remapper device name (default: auto-detect)")
     parser.add_argument("--get", action="store_true", help="Show last applied config")
     parser.add_argument("--default", action="store_true", help="Apply factory defaults")
     args = parser.parse_args(argv)
@@ -88,6 +157,10 @@ def main(argv=None):
             return 0
         if args.bind:
             return _cmd_bind(engine, args)
+        if args.unbind is not None:
+            return _cmd_unbind(engine, args)
+        if args.list_binds:
+            return _cmd_list_binds(engine, args)
 
         cfg = default_config()
         changed = False

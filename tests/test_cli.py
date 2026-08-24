@@ -64,27 +64,35 @@ def test_cli_polling(monkeypatch, capsys):
 
 
 def test_cli_bind(monkeypatch, capsys, tmp_path):
-    fake = None
+    monkeypatch.setattr("cli.HatorEngine", _FakeEngine)
+    written = {}
 
-    class TrackingEngine(_FakeEngine):
-        def __init__(self):
-            super().__init__()
-            nonlocal fake
-            fake = self
+    def fake_set_binding(device_name, btn, action, origin_hash, preset_dir=None, name=None):
+        written["device_name"] = device_name
+        written["btn"] = btn
+        written["action"] = action
+        written["origin_hash"] = origin_hash
+        return str(tmp_path / "hator.json")
 
-    monkeypatch.setattr("cli.HatorEngine", TrackingEngine)
-    # Redirect write_preset to a temp dir to avoid touching real config
-    monkeypatch.setattr(
-        "cli.write_preset",
-        lambda device_name, evdev, action, preset_dir=None: str(tmp_path / "hator.json"),
-    )
-    rc = main(["--bind", "6", "KEY_PLAYPAUSE"])
+    monkeypatch.setattr("cli.set_binding", fake_set_binding)
+    rc = main(["--bind", "4", "KEY_PLAYPAUSE", "--origin-hash", "aa" * 16])
     out = capsys.readouterr().out
     assert rc == 0
     assert "bound" in out.lower()
     assert "key_playpause" in out.lower()
-    assert fake is not None
-    assert len(fake.applied) == 1
+    assert written["btn"] == 3  # button 4 -> physical index 3 (forward)
+    assert written["origin_hash"] == "aa" * 16
+
+
+def test_cli_bind_requires_origin_hash_without_evdev(monkeypatch, capsys):
+    """Without --origin-hash and without python-evdev, bind must fail with a
+    clear message instead of writing a broken preset."""
+    monkeypatch.setattr("cli.HatorEngine", _FakeEngine)
+    monkeypatch.setattr("cli.find_origin_hash", lambda *a, **k: None)
+    rc = main(["--bind", "4", "KEY_A"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "origin_hash" in err.lower()
 
 
 def test_cli_bind_out_of_range_button_is_friendly_error(monkeypatch, capsys):
@@ -105,31 +113,39 @@ def test_cli_bind_zero_is_friendly_error(monkeypatch, capsys):
     assert "invalid button number" in err.lower()
 
 
-def test_cli_bind_button6_warns_about_forward_collision(monkeypatch, capsys, tmp_path):
-    """Binding button 6 (DPI) aliases the same on-device action as button 4
-    (Forward, default). This must surface a warning, not fail silently."""
-    fake = None
-
-    class TrackingEngine(_FakeEngine):
-        def __init__(self):
-            super().__init__()
-            nonlocal fake
-            fake = self
-
-        def get_state(self):
-            from engine.protocol import default_config
-            return default_config()
-
-    monkeypatch.setattr("cli.HatorEngine", TrackingEngine)
-    monkeypatch.setattr(
-        "cli.write_preset",
-        lambda device_name, evdev, action, preset_dir=None: str(tmp_path / "hator.json"),
-    )
-    rc = main(["--bind", "6", "KEY_PLAYPAUSE"])
+def test_cli_bind_button6_dpi_is_not_remappable(monkeypatch, capsys):
+    """Button 6 (DPI) emits no distinct host event, so it cannot be remapped
+    host-side. This must be a clear error, not a silent alias."""
+    monkeypatch.setattr("cli.HatorEngine", _FakeEngine)
+    monkeypatch.setattr("cli.find_origin_hash", lambda *a, **k: None)
+    rc = main(["--bind", "6", "KEY_PLAYPAUSE", "--origin-hash", "aa" * 16])
     err = capsys.readouterr().err
+    assert rc == 2
+    assert "dpi" in err.lower()
+
+
+def test_cli_unbind_and_list_binds(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr("cli.HatorEngine", _FakeEngine)
+
+    def fake_unbind(device, btn, preset_dir=None):
+        assert btn == 3
+        return True
+
+    monkeypatch.setattr("cli.unbind", fake_unbind)
+    rc = main(["--unbind", "4", "--device-name", "HATOR Mouse"])
+    out = capsys.readouterr().out
     assert rc == 0
-    assert "warning" in err.lower()
-    assert "button 4" in err.lower() or "button 6" in err.lower()
+    assert "unbound" in out.lower()
+
+    monkeypatch.setattr("cli.list_bindings", lambda device, preset_dir=None: [
+        {"btn": 4, "evdev": "BTN_SIDE", "action": "KEY_A"},
+        {"btn": 5, "evdev": "BTN_EXTRA", "action": "KEY_B"},
+    ])
+    rc = main(["--list-binds", "--device-name", "HATOR Mouse"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "key_a" in out.lower()
+    assert "button 4" in out.lower()
 
 
 def test_cli_engine_close_called(monkeypatch):

@@ -47,6 +47,10 @@ The `requirements.txt` includes:
 - `pyusb>=1.2` — USB communication library
 - `pytest>=7.0` — Testing framework
 
+`python-evdev` is an optional dependency. Install it to let `--bind`
+auto-detect the device's `origin_hash`; without it you pass `--origin-hash`
+explicitly (see Button Binding).
+
 PyGObject (the Python `gi` module / GTK4 bindings) is intentionally NOT in
 `requirements.txt` because it is a system package on every mainstream distro
 (see the Prerequisites block above). Two consequences:
@@ -137,25 +141,36 @@ currently applied rate.
 
 #### Button Binding
 
-View button mapping:
+Bind a physical mouse button (1-5) to an action. The action is an evdev key
+name (or an input-remapper `<macro>...</macro>` string). This writes a preset
+to input-remapper so Linux remaps the event system-wide:
 
 ```bash
-hator --get
+hator --bind 4 KEY_ENTER        # forward button -> Enter
+hator --bind 5 KEY_PLAYPAUSE    # backward button -> Play/Pause
 ```
 
-Bind a physical mouse button (1-6) to an action. The action is an evdev key
-name (or an input-remapper `<macro>...</macro>` string), not an evdev button
-name:
+Multiple `--bind` calls accumulate into one preset per device (each button can
+have one action). Remove or list them:
 
 ```bash
-hator --bind 4 KEY_ENTER
-hator --bind 6 KEY_PLAYPAUSE
+hator --unbind 4                # clear forward button
+hator --list-binds              # show current bindings
 ```
 
-Note: physical button 6 is the hidden DPI button. The mouse only exposes 5
-distinct host-visible button codes (left/right/middle/forward/backward), so
-binding button 6 aliases it on-device to the same action as button 4
-(Forward) — the CLI prints a warning to stderr when this collision occurs.
+For a mapping to actually trigger, input-remapper needs the device's
+`origin_hash`. If `python-evdev` is installed, it is auto-detected from the
+HATOR receiver's event node; otherwise pass it explicitly (it is shown in the
+input-remapper GUI) once, and it is remembered:
+
+```bash
+hator --bind 4 KEY_ENTER --origin-hash <hash> --device-name "<evdev name>"
+```
+
+**Buttons 1-5** (left/right/middle/forward/backward) have distinct
+host-visible events and are remappable. **Button 6 (the DPI button) is not**
+host-remappable: it emits no standard HID button event (it only cycles DPI
+slots, reported via report 0x07), so input-remapper cannot see it.
 
 Reset to defaults:
 
@@ -182,14 +197,18 @@ Currently the GUI provides:
 
 ## Architecture
 
-### Hybrid Binding Model
+### Host-Side Binding Model
 
-Button binding operates on two layers:
+Button remapping is done **host-side** via input-remapper (minimal
+reverse-engineering): the tool writes a JSON preset under
+`~/.config/input-remapper-2/presets/<device>/hator.json` that maps a physical
+button's evdev event to an output action. input-remapper's service intercepts
+the event and emits the mapped action system-wide.
 
-1. **On-Device Exposure** — The mouse exposes 8 button slots via USB protocol (6 configurable + 2 fixed). CLI bindings directly configure the configurable slots.
-2. **input-remapper Integration** — For advanced remapping (e.g., multi-key sequences), bindings are registered in input-remapper's configuration, allowing Linux to intercept and remap events system-wide.
-
-This hybrid approach gives you both immediate on-device configuration and the flexibility of system-wide input transformation.
+The preset's `input_combination` carries the device's `origin_hash` (the hash
+input-remapper uses to identify the event node) so the mapping only triggers on
+this mouse. Buttons 1-5 (left/right/middle/forward/backward) are remappable;
+the DPI button has no distinct host event and is not.
 
 ### Battery Monitoring Strategy
 
