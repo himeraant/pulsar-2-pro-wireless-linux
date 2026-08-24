@@ -33,6 +33,7 @@ class HatorEngine:
             dev,
             polling_hz=merged["polling_rate"],
             dpi_slots=merged["cpi"],
+            dpi_count=merged.get("dpi_count"),
         )
         save_state(merged, self.state_path)
         return merged

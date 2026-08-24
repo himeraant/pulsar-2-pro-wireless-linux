@@ -73,3 +73,15 @@ def test_default_config_shape():
     cfg = p.default_config()
     assert len(cfg["cpi"]) == 7
     assert cfg["polling_rate"] == 1000
+
+
+def test_dpi_count_encoding():
+    blob = make_blob()
+    out = p.build_config(blob, dpi_count=3)
+    assert out[11] == 0x20 + 3
+
+
+def test_dpi_count_out_of_range():
+    blob = make_blob()
+    with pytest.raises(ValueError):
+        p.build_config(blob, dpi_count=9)

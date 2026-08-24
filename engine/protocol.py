@@ -44,6 +44,7 @@ def default_config() -> dict:
     return {
         "polling_rate": DEFAULT_POLLING_HZ,
         "cpi": list(DEFAULT_CPI),
+        "dpi_count": 7,
         "button_map": ["left", "right", "middle", "backward", "forward", "dpi"],
     }
 
@@ -91,8 +92,8 @@ def get_dpi_slots(blob: bytes) -> list[int]:
     return slots
 
 
-def build_config(blob: bytes, *, polling_hz=None, dpi_slots=None) -> bytes:
-    """Return a modified copy of the config blob with polling/DPI changed."""
+def build_config(blob: bytes, *, polling_hz=None, dpi_slots=None, dpi_count=None) -> bytes:
+    """Return a modified copy of the config blob with polling/DPI/count changed."""
     out = bytearray(blob)
     if polling_hz is not None:
         out[10] = POLLING_TO_CODE[polling_hz]
@@ -101,6 +102,10 @@ def build_config(blob: bytes, *, polling_hz=None, dpi_slots=None) -> bytes:
             cpi = max(DPI_MIN, min(DPI_MAX, cpi))
             reg = (cpi // 100) - 1
             out[off : off + 2] = reg.to_bytes(2, "little")
+    if dpi_count is not None:
+        if not 1 <= dpi_count <= 7:
+            raise ValueError(f"DPI slot count must be 1-7, got {dpi_count}")
+        out[11] = 0x20 + dpi_count  # 0x20 + number of enabled DPI slots
     return bytes(out)
 
 
@@ -112,13 +117,13 @@ def _load_config_template() -> bytearray:
         return bytearray(f.read())
 
 
-def apply_config(dev, *, polling_hz=None, dpi_slots=None) -> bytes:
-    """Write DPI/polling to the receiver's config (report 0x08, 520 bytes).
+def apply_config(dev, *, polling_hz=None, dpi_slots=None, dpi_count=None) -> bytes:
+    """Write DPI/polling/slot-count to the receiver's config (report 0x08, 520 bytes).
 
     The device only accepts a full 520-byte write with a longer timeout. The
-    config data (polling byte 10, DPI slots 13-25) lives in the first 154 bytes;
-    the trailing bytes (button map) come from the bundled template (captured
-    from this device, see config_template.bin).
+    config data (polling byte 10, DPI slots 13-25, slot count byte 11) lives in
+    the first 154 bytes; the trailing bytes (button map) come from the bundled
+    template (captured from this device, see config_template.bin).
     """
     _preamble(dev)
     blob = _load_config_template()
@@ -129,5 +134,9 @@ def apply_config(dev, *, polling_hz=None, dpi_slots=None) -> bytes:
             cpi = max(DPI_MIN, min(DPI_MAX, cpi))
             reg = (cpi // 100) - 1
             blob[off : off + 2] = reg.to_bytes(2, "little")
+    if dpi_count is not None:
+        if not 1 <= dpi_count <= 7:
+            raise ValueError(f"DPI slot count must be 1-7, got {dpi_count}")
+        blob[11] = 0x20 + dpi_count
     dev.feature_out(REPORT_CONFIG, blob[1:])
     return bytes(blob)

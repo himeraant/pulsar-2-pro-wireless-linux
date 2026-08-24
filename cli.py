@@ -59,8 +59,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="HATOR Pulsar 2 Pro configurator")
     parser.add_argument("--battery", action="store_true", help="Show battery charge")
     parser.add_argument("--dpi", nargs="+", type=int, metavar="CPI", help="Set DPI slots")
-    parser.add_argument("--active-dpi", type=int, metavar="IDX", help="Active DPI slot index 0-6")
-    parser.add_argument("--dpi-count", type=int, metavar="N", help="Active DPI slot count 1-7")
+    parser.add_argument("--active-dpi", type=int, metavar="N", help="Number of active DPI slots 1-7 (same as --dpi-count)")
+    parser.add_argument("--dpi-count", type=int, metavar="N", help="Number of active DPI slots 1-7")
     parser.add_argument("--polling", type=int, metavar="HZ", choices=list(POLLING_OPTIONS),
                         help="Polling rate: 125/250/500/1000")
     parser.add_argument("--bind", nargs=2, metavar=("BTN", "ACTION"),
@@ -93,11 +93,12 @@ def main(argv=None):
         if args.dpi is not None:
             cfg["cpi"] = args.dpi
             changed = True
-        if args.active_dpi is not None:
-            cfg["active_slot"] = args.active_dpi
-            changed = True
-        if args.dpi_count is not None:
-            cfg["dpi_count"] = args.dpi_count
+        if args.active_dpi is not None or args.dpi_count is not None:
+            count = args.dpi_count if args.dpi_count is not None else args.active_dpi
+            if not 1 <= count <= 7:
+                print(f"error: DPI slot count must be 1-7, got {count}", file=sys.stderr)
+                return 2
+            cfg["dpi_count"] = count
             changed = True
         if args.polling is not None:
             cfg["polling_rate"] = args.polling
