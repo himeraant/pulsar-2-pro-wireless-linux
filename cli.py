@@ -156,6 +156,8 @@ def main(argv=None):
                         help="Run the media-key daemon (reads raw hidraw, injects media keys via uinput)")
     parser.add_argument("--media-dev", default=None,
                         help="hidraw node for --media-daemon (e.g. /dev/hidraw3; auto-detected if omitted)")
+    parser.add_argument("--media-debug", action="store_true",
+                        help="Print raw hidraw reports in --media-daemon")
     parser.add_argument("--origin-hash", default=None,
                         help="input-remapper device origin_hash (auto-detected if python-evdev is installed)")
     parser.add_argument("--device-name", default=None, help="input-remapper device name (default: auto-detect)")
@@ -186,7 +188,7 @@ def main(argv=None):
         if args.list_binds:
             return _cmd_list_binds(engine, args)
         if args.media_daemon:
-            return media.run(args.media_dev)
+            return media.run(args.media_dev, debug=args.media_debug)
 
         cfg = default_config()
         changed = False

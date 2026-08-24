@@ -78,7 +78,13 @@ def _usb_id(path: str):
 
 
 def find_hidraw(interface=1):
-    """Return the /dev/hidraw* node for the given interface of the receiver."""
+    """Return the /dev/hidraw* node for the receiver.
+
+    Prefers a node whose sysfs path shows the given interface, but falls back
+    to any node matching the vendor (the receiver exposes a single hidraw that
+    carries all its reports, including the Consumer Control report 0x02).
+    """
+    best = None
     for dev in glob.glob("/dev/hidraw*"):
         name = os.path.basename(dev)
         syspath = os.path.join("/sys/class/hidraw", name, "device")
@@ -86,9 +92,13 @@ def find_hidraw(interface=1):
         if not info:
             continue
         vid, _pid, iface = info
-        if vid == VID and iface == interface:
+        if vid != VID:
+            continue
+        if iface == interface:
             return dev
-    return None
+        if best is None:
+            best = dev
+    return best
 
 
 def build_uinput():
@@ -128,7 +138,7 @@ def list_hidraws():
     return out
 
 
-def run(dev_path=None):
+def run(dev_path=None, debug=False):
     if evdev is None:
         raise SystemExit("python-evdev is required for the media daemon "
                          "(pip install evdev)")
@@ -155,6 +165,8 @@ def run(dev_path=None):
                 continue
             if not data:
                 continue
+            if debug:
+                print("raw:", data.hex(" "))
             pressed = _bits_to_keys(bytes(data))
             for key in pressed - last:
                 ui.write(E.EV_KEY, key, 1)
@@ -171,4 +183,4 @@ def run(dev_path=None):
 
 
 if __name__ == "__main__":
-    run()
+    run(debug="--debug" in sys.argv)
